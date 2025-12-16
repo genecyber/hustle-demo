@@ -2,71 +2,149 @@
 
 A minimal example showing how to build AI-powered browser applications with the Emblem Vault AI suite.
 
+## Installation
+
+Both SDKs are available on npm and work in vanilla JavaScript or any framework:
+
+```bash
+npm install hustle-incognito emblem-auth-sdk
+```
+
+## Usage Options
+
+### Option 1: Vanilla HTML/JavaScript (CDN)
+
+No build step required. Load directly from CDN:
+
+```html
+<!-- Emblem Auth SDK -->
+<script src="https://unpkg.com/emblem-auth-sdk@latest/dist/emblem-auth.min.js"></script>
+
+<!-- Hustle Incognito SDK -->
+<script type="module">
+  import { HustleIncognitoClient } from 'https://unpkg.com/hustle-incognito@latest/dist/browser/hustle-incognito.esm.js';
+
+  // Initialize and use...
+</script>
+```
+
+This demo uses vanilla JS - run `npm start` and open `http://localhost:8080`.
+
+### Option 2: React / Next.js
+
+```jsx
+import { useMemo, useState, useCallback } from 'react';
+import { HustleIncognitoClient } from 'hustle-incognito';
+import { EmblemAuthSDK } from 'emblem-auth-sdk';
+
+function useHustleClient(settings) {
+  const client = useMemo(() => {
+    if (!settings.apiKey) return null;
+
+    try {
+      return new HustleIncognitoClient({
+        apiKey: settings.apiKey,
+        hustleApiUrl: settings.baseUrl,
+        debug: settings.debug
+      });
+    } catch (error) {
+      console.error('Failed to create HustleIncognitoClient:', error);
+      return null;
+    }
+  }, [settings.apiKey, settings.baseUrl, settings.debug]);
+
+  return client;
+}
+
+function useEmblemAuth(appId) {
+  const [session, setSession] = useState(null);
+
+  const authSDK = useMemo(() => {
+    return new EmblemAuthSDK({
+      appId,
+      onSuccess: (session) => setSession(session),
+      onError: (error) => console.error('Auth error:', error)
+    });
+  }, [appId]);
+
+  const connect = useCallback(() => authSDK.openAuthModal(), [authSDK]);
+  const disconnect = useCallback(() => {
+    authSDK.logout();
+    setSession(null);
+  }, [authSDK]);
+
+  return { authSDK, session, connect, disconnect };
+}
+```
+
+### Option 3: With Emblem Auth (Wallet-Based)
+
+For wallet authentication instead of API keys:
+
+```javascript
+const authSDK = new EmblemAuthSDK({
+  appId: 'your-app-id',
+  onSuccess: (session) => {
+    // Create client with auth SDK - no API key needed
+    const client = new HustleIncognitoClient({
+      sdk: authSDK,
+      hustleApiUrl: 'https://agenthustle.ai'
+    });
+  }
+});
+
+authSDK.openAuthModal();
+```
+
 ## Why a Server?
 
-Browsers block requests from `file://` URLs for security reasons, and CORS policies prevent direct API calls from unknown origins. This simple static server solves both problems - just serve your files and everything works.
-
-## Quick Start
+Browsers block requests from `file://` URLs and CORS policies prevent direct API calls. This simple static server solves both - just serve your files and everything works.
 
 ```bash
 npm start
 # Open http://localhost:8080
 ```
 
-That's it. No build step, no bundler, no configuration files.
+## Emblem Auth
 
-## Loading the SDKs
-
-Both SDKs load directly from CDN - no npm install required for browser use:
-
-```html
-<!-- Emblem Auth SDK (standard script) -->
-<script src="https://unpkg.com/emblem-auth-sdk@latest/dist/emblem-auth.min.js"></script>
-
-<!-- Hustle Incognito SDK (ES module) -->
-<script type="module">
-  import { HustleIncognitoClient } from 'https://unpkg.com/hustle-incognito@latest/dist/browser/hustle-incognito.esm.js';
-</script>
-```
-
-## Initializing Emblem Auth
-
-Emblem Auth handles wallet connection and session management:
+Handles wallet connection and session management:
 
 ```javascript
-const authSDK = new EmblemAuth.EmblemAuthSDK({
+const authSDK = new EmblemAuthSDK({
   appId: 'your-app-id',
   onSuccess: (session) => {
     console.log('Connected! Vault:', session.user.vaultId);
-    // Initialize Hustle client here
   },
   onError: (error) => {
     console.error('Auth failed:', error.message);
   }
 });
 
-// Open the wallet connection modal
+// Open wallet connection modal
 authSDK.openAuthModal();
 
 // Check for existing session on page load
 const existingSession = authSDK.getSession();
-if (existingSession) {
-  // User is already connected
-}
 
 // Logout
 authSDK.logout();
 ```
 
-## Initializing Hustle Incognito
+## Hustle Incognito
 
-Pass the auth SDK directly - it handles tokens automatically:
+Two authentication modes:
 
 ```javascript
-const hustleClient = new HustleIncognitoClient({
+// With Emblem Auth (wallet-based)
+const client = new HustleIncognitoClient({
   sdk: authSDK,
-  hustleApiUrl: 'https://dev.agenthustle.ai',
-  debug: false
+  hustleApiUrl: 'https://agenthustle.ai'
+});
+
+// With API key (server-side or trusted environments)
+const client = new HustleIncognitoClient({
+  apiKey: 'your-api-key',
+  hustleApiUrl: 'https://agenthustle.ai'
 });
 ```
 
