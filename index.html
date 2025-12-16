@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hustle Incognito + Emblem Auth Demo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Agent Hustle SDK</h1>
+    <p class="subtitle">Basic customizable streaming chat demo with EmblemAuth support</p>
+
+    <!-- Authentication Section -->
+    <div class="auth-section">
+      <!-- Not Connected State -->
+      <div id="connectContainer" class="connect-container">
+        <button id="loginBtn" class="connect-btn">
+          <span class="connect-icon">→</span>
+          Connect
+        </button>
+      </div>
+
+      <!-- Connected State -->
+      <div id="connectedContainer" class="connected-container" style="display:none;">
+        <div class="connected-header">
+          <div class="vault-info-wrapper">
+            <button id="connectedBtn" class="connected-btn">
+              <span class="connected-check">✓</span>
+              <span>Connected</span>
+              <span class="connected-dot">•</span>
+              <span id="shortAddress" class="short-address">0x0000...0000</span>
+              <span class="dropdown-arrow">▾</span>
+            </button>
+
+            <div id="vaultInfo" class="vault-info">
+              <div class="vault-info-header">VAULT INFORMATION</div>
+              <div class="vault-info-row">
+                <span class="vault-label">Vault ID</span>
+                <div class="vault-value-row">
+                  <span id="vaultIdDisplay" class="vault-value">#0</span>
+                  <button class="copy-btn" onclick="copyToClipboard('vaultIdDisplay', this)">Copy</button>
+                </div>
+              </div>
+              <div class="vault-info-row">
+                <span class="vault-label">Connected Wallet</span>
+                <div class="vault-value-row">
+                  <span id="walletDisplay" class="vault-value mono">0x0000000000000000000000000000000000000000</span>
+                  <button class="copy-btn" onclick="copyToClipboard('walletDisplay', this)">Copy</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button id="logoutBtn" class="logout-icon-btn" title="Disconnect">⏻</button>
+        </div>
+      </div>
+    </div>
+    <div id="authStatus" style="display:none;"></div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <span class="modal-title">Settings</span>
+          <button id="closeSettingsBtn" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- Model Selection -->
+          <div class="setting-group">
+            <label class="setting-label">Model</label>
+            <p class="setting-description">Select the AI model to use for chat responses</p>
+            <select id="modelSelect" class="setting-select">
+              <option value="">Default (server decides)</option>
+            </select>
+            <div id="modelInfo" class="model-info"></div>
+          </div>
+
+          <!-- Skip Server System Prompt -->
+          <div class="setting-group">
+            <label class="setting-label">Server System Prompt</label>
+            <div class="setting-toggle">
+              <span class="toggle-label">Skip server-provided system prompt</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="skipServerPromptToggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <p class="setting-description" style="margin-top: 8px;">When enabled, the server's default system prompt will not be used</p>
+          </div>
+
+          <!-- Custom System Prompt -->
+          <div class="setting-group">
+            <label class="setting-label">Custom System Prompt</label>
+            <p class="setting-description">Provide instructions for how the AI should behave</p>
+            <textarea id="systemPromptModal" class="setting-textarea" placeholder="You are a helpful assistant..."></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+    <pre id="sessionInfo" style="display:none;">No active session</pre>
+  </div><!-- End container -->
+
+  <!-- Chat Wrapper -->
+  <div class="chat-wrapper">
+    <!-- Chat Card -->
+    <div class="card">
+      <div class="chat-header">
+        <h2>Chat</h2>
+        <button id="fullscreenBtn" class="fullscreen-btn" title="Toggle fullscreen">
+          <span class="fullscreen-icon expand">⛶</span>
+          <span class="fullscreen-icon collapse" style="display:none;">⛶</span>
+        </button>
+        <div class="settings-wrapper">
+          <button id="settingsBtn" class="settings-btn" title="Settings" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+          <span id="selectedModelLabel" class="selected-model-label"></span>
+        </div>
+      </div>
+      <div class="chat-container">
+        <div id="messages" class="messages">
+          <div class="loading">Connect to start chatting...</div>
+        </div>
+        <div id="toolActivity" class="tool-activity"></div>
+        <div class="chat-input-row">
+          <div class="file-upload-area" id="uploadArea">
+            <input type="file" id="fileInput" class="file-input" accept="image/*" multiple>
+            <label for="fileInput" class="file-upload-btn" title="Attach images">
+              <span class="file-upload-icon">📎</span>
+            </label>
+            <span id="uploadStatus" class="uploading" style="display:none;"></span>
+          </div>
+          <div class="chat-input">
+            <input type="text" id="messageInput" placeholder="Type a message..." disabled>
+            <button id="sendBtn" class="btn" disabled>Send</button>
+          </div>
+        </div>
+        <div id="uploadedFiles" class="uploaded-files"></div>
+      </div>
+      <div id="chatError" class="error" style="display:none;"></div>
+    </div>
+  </div><!-- End chat-wrapper -->
+
+  <!-- Debug Toggle -->
+  <div class="debug-toggle">
+    <button id="debugToggle" class="debug-toggle-btn">
+      <span class="debug-icon">⚙</span>
+      Debug
+    </button>
+  </div>
+  <div id="debugCard" class="card" style="display:none; max-width: 800px; margin: 0 auto 20px auto;">
+    <h2>Debug Log</h2>
+    <pre id="debugLog">Waiting for initialization...</pre>
+  </div>
+
+  <script>
+    const CONFIG = {
+      hustleApiUrl: 'https://dev.agenthustle.ai',
+      emblemAuthAppId: 'demo-app-id',
+      emblemAuthApiUrl: 'https://dev-api.emblemvault.ai',
+      emblemAuthModalUrl: 'https://dev-auth.emblemvault.ai/connect',
+      debug: false
+    };
+  </script>
+
+  <!-- Load Marked.js for markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Load Emblem Auth SDK from CDN -->
+  <script src="https://unpkg.com/emblem-auth-sdk@latest/dist/emblem-auth.min.js"></script>
+
+  <!-- Load Hustle Incognito -->
+  <script type="module">
+    // import { HustleIncognitoClient } from '../dist/browser/hustle-incognito.esm.js';
+    // Alternatively import hustle incognito from cdn
+    import { HustleIncognitoClient } from 'https://unpkg.com/hustle-incognito@latest/dist/browser/hustle-incognito.esm.js';
+    
+    // =========================================================================
+
+    // Make it available globally for debugging
+    window.HustleIncognitoClient = HustleIncognitoClient;
+
+    // State
+    let authSDK = null;
+    let hustleClient = null;
+    let messages = [];
+    let uploadedAttachments = [];
+    let availableModels = [];
+    let settings = {
+      model: '',
+      skipServerPrompt: false,
+      systemPrompt: ''
+    };
+
+    // DOM elements
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const authStatus = document.getElementById('authStatus');
+    const sessionInfo = document.getElementById('sessionInfo');
+    const connectContainer = document.getElementById('connectContainer');
+    const connectedContainer = document.getElementById('connectedContainer');
+    const shortAddressSpan = document.getElementById('shortAddress');
+    const vaultIdDisplay = document.getElementById('vaultIdDisplay');
+    const walletDisplay = document.getElementById('walletDisplay');
+    const messagesDiv = document.getElementById('messages');
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const chatError = document.getElementById('chatError');
+    const debugLog = document.getElementById('debugLog');
+    const debugToggle = document.getElementById('debugToggle');
+    const debugCard = document.getElementById('debugCard');
+    const fileInput = document.getElementById('fileInput');
+    const uploadArea = document.getElementById('uploadArea');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const uploadedFilesDiv = document.getElementById('uploadedFiles');
+    // Settings elements
+    const settingsBtn = document.getElementById('settingsBtn');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const modelSelect = document.getElementById('modelSelect');
+    const modelInfo = document.getElementById('modelInfo');
+    const skipServerPromptToggle = document.getElementById('skipServerPromptToggle');
+    const systemPromptModal = document.getElementById('systemPromptModal');
+    const selectedModelLabel = document.getElementById('selectedModelLabel');
+    const toolActivity = document.getElementById('toolActivity');
+
+    // Tool activity tracking
+    const activeTools = new Map(); // toolCallId -> element
+
+    function addToolChip(toolCallId, toolName, args) {
+      if (activeTools.has(toolCallId)) return;
+      const chip = document.createElement('div');
+      chip.className = 'tool-chip';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = toolName;
+      chip.appendChild(nameSpan);
+
+      if (args && Object.keys(args).length > 0) {
+        const tooltip = document.createElement('div');
+        tooltip.className = 'tool-tooltip';
+        tooltip.textContent = JSON.stringify(args, null, 2);
+        chip.appendChild(tooltip);
+      }
+
+      toolActivity.appendChild(chip);
+      activeTools.set(toolCallId, chip);
+    }
+
+    function removeToolChip(toolCallId) {
+      const chip = activeTools.get(toolCallId);
+      if (chip) {
+        chip.remove();
+        activeTools.delete(toolCallId);
+      }
+    }
+
+    function clearToolChips() {
+      toolActivity.innerHTML = '';
+      activeTools.clear();
+    }
+
+    function showToolSummary(response) {
+      clearToolChips();
+
+      const toolCount = response.toolCalls?.length || 0;
+      const hasSummarizationInfo = response.pathInfo?.thresholdReached || response.pathInfo?.summary;
+
+      // Show if we have tools OR summarization info
+      if (toolCount === 0 && !hasSummarizationInfo) return;
+
+      const summary = document.createElement('div');
+      summary.className = 'tool-summary';
+
+      // Build a map of toolCallId -> result
+      const resultMap = new Map();
+      (response.toolResults || []).forEach(r => {
+        resultMap.set(r.toolCallId, r.result);
+      });
+
+      const reasoning = response.reasoning?.thinking || '';
+      const categories = response.devToolsInfo?.qualifiedCategories || response.reasoning?.categories || [];
+      const availableCount = response.devToolsInfo?.toolCount || 0;
+
+      // Build clickable tool names
+      const toolLinks = response.toolCalls.map((t, i) => {
+        const name = t.toolName || 'unknown';
+        return `<span class="tool-name-link" data-tool-index="${i}">${name}</span>`;
+      }).join(', ');
+
+      // Determine header text based on what info we have
+      const headerText = toolCount > 0
+        ? `Used ${toolCount} tool${toolCount !== 1 ? 's' : ''}`
+        : 'Context Info';
+
+      summary.innerHTML = `
+        <div class="tool-summary-header">
+          <span>▸</span> ${headerText}
+        </div>
+        <div class="tool-summary-details">
+          ${reasoning ? `<div><span class="tool-summary-label">Reasoning:</span> ${reasoning}</div>` : ''}
+          ${categories.length ? `<div><span class="tool-summary-label">Categories:</span> ${categories.join(', ')}</div>` : ''}
+          ${availableCount ? `<div><span class="tool-summary-label">Available:</span> ${availableCount} tools</div>` : ''}
+          ${toolCount > 0 ? `<div><span class="tool-summary-label">Used:</span> ${toolLinks}</div>` : ''}
+          <div class="tool-detail-container"></div>
+          ${response.pathInfo?.thresholdReached ? `
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #1f2937;">
+              <span class="tool-summary-label" style="color: #f59e0b;">⚠ Context threshold reached</span>
+              <div style="margin-top: 4px;">
+                Tokens: ${response.pathInfo.totalTokens}/${response.pathInfo.threshold} |
+                Retain: ${response.pathInfo.messageRetentionCount} messages
+              </div>
+            </div>
+          ` : ''}
+          ${response.pathInfo?.summary ? `
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #1f2937;">
+              <span class="tool-summary-label" style="color: #10b981;">📝 Conversation Summary</span>
+              <div style="margin-top: 4px; font-size: 12px; color: #9ca3af; max-height: 150px; overflow-y: auto; padding: 8px; background: #0d1117; border-radius: 4px; white-space: pre-wrap;">
+                ${response.pathInfo.summary}
+              </div>
+              ${response.pathInfo.summaryEndIndex ? `
+                <div style="margin-top: 4px; font-size: 11px; color: #6b7280;">
+                  Summary covers messages up to index ${response.pathInfo.summaryEndIndex}
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      summary.querySelector('.tool-summary-header').addEventListener('click', () => {
+        summary.classList.toggle('expanded');
+        summary.querySelector('.tool-summary-header span').textContent =
+          summary.classList.contains('expanded') ? '▾' : '▸';
+      });
+
+      // Handle tool name clicks
+      const detailContainer = summary.querySelector('.tool-detail-container');
+      summary.querySelectorAll('.tool-name-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = parseInt(link.dataset.toolIndex);
+          const tool = response.toolCalls[idx];
+          const result = resultMap.get(tool.toolCallId);
+
+          // Toggle: if already showing this tool, hide it
+          if (detailContainer.dataset.activeIndex === String(idx)) {
+            detailContainer.innerHTML = '';
+            detailContainer.dataset.activeIndex = '';
+            return;
+          }
+
+          detailContainer.dataset.activeIndex = idx;
+          detailContainer.innerHTML = `
+            <div class="tool-detail">
+              <div class="tool-detail-section">
+                <div class="tool-detail-title">Request (${tool.toolName}):</div>
+                <div class="tool-detail-content">${JSON.stringify(tool.args || {}, null, 2)}</div>
+              </div>
+              <div class="tool-detail-section">
+                <div class="tool-detail-title">Result:</div>
+                <div class="tool-detail-content">${JSON.stringify(result, null, 2)}</div>
+              </div>
+            </div>
+          `;
+        });
+      });
+
+      toolActivity.appendChild(summary);
+    }
+
+    function markToolComplete(toolCallId) {
+      const chip = activeTools.get(toolCallId);
+      if (chip) chip.classList.add('complete');
+    }
+
+    // Debug logging
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      debugLog.textContent = `[${time}] ${msg}\n` + debugLog.textContent;
+      console.log(`[${time}]`, msg);
+    }
+
+    // Settings functions
+    function openSettings() {
+      settingsModal.classList.add('open');
+      // Sync UI with current settings
+      modelSelect.value = settings.model;
+      skipServerPromptToggle.checked = settings.skipServerPrompt;
+      systemPromptModal.value = settings.systemPrompt;
+      updateModelInfo();
+    }
+
+    function closeSettings() {
+      settingsModal.classList.remove('open');
+    }
+
+    async function loadModels() {
+      if (!hustleClient) return;
+
+      log('Loading available models...');
+      modelSelect.disabled = true;
+
+      try {
+        availableModels = await hustleClient.getModels();
+        log(`Loaded ${availableModels.length} models`);
+
+        // Clear existing options except default
+        modelSelect.innerHTML = '<option value="">Default (server decides)</option>';
+
+        // Group models by provider
+        const grouped = {};
+        availableModels.forEach(model => {
+          const [provider] = model.id.split('/');
+          if (!grouped[provider]) grouped[provider] = [];
+          grouped[provider].push(model);
+        });
+
+        // Add grouped options
+        Object.keys(grouped).sort().forEach(provider => {
+          const group = document.createElement('optgroup');
+          group.label = provider.charAt(0).toUpperCase() + provider.slice(1);
+
+          grouped[provider].forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.name;
+            group.appendChild(option);
+          });
+
+          modelSelect.appendChild(group);
+        });
+
+        // Restore saved selection
+        if (settings.model) {
+          modelSelect.value = settings.model;
+        }
+
+        modelSelect.disabled = false;
+        updateModelInfo();
+      } catch (error) {
+        log('Failed to load models: ' + error.message);
+        modelSelect.disabled = false;
+      }
+    }
+
+    function updateModelInfo() {
+      const selectedId = modelSelect.value;
+      if (!selectedId) {
+        modelInfo.textContent = '';
+        return;
+      }
+
+      const model = availableModels.find(m => m.id === selectedId);
+      if (model) {
+        const contextK = Math.round(model.context_length / 1000);
+        const promptCost = parseFloat(model.pricing?.prompt || 0) * 1000000;
+        const completionCost = parseFloat(model.pricing?.completion || 0) * 1000000;
+        modelInfo.textContent = `Context: ${contextK}K tokens | Cost: $${promptCost.toFixed(2)}/$${completionCost.toFixed(2)} per 1M tokens`;
+      }
+    }
+
+    function updateModelLabel() {
+      if (settings.model) {
+        // Extract just the model name (e.g., "claude-sonnet-4" from "anthropic/claude-sonnet-4")
+        const modelName = settings.model.split('/').pop() || settings.model;
+        selectedModelLabel.textContent = modelName;
+      } else {
+        selectedModelLabel.textContent = '';
+      }
+    }
+
+    function saveSettings() {
+      settings.model = modelSelect.value;
+      settings.skipServerPrompt = skipServerPromptToggle.checked;
+      settings.systemPrompt = systemPromptModal.value;
+
+      // Persist to localStorage
+      localStorage.setItem('hustle_auth_demo_settings', JSON.stringify(settings));
+      log('Settings saved: model=' + (settings.model || 'default') + ', skipServerPrompt=' + settings.skipServerPrompt);
+      updateModelLabel();
+    }
+
+    function loadSettings() {
+      const saved = localStorage.getItem('hustle_auth_demo_settings');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          settings = { ...settings, ...parsed };
+          log('Loaded settings from storage');
+          updateModelLabel();
+        } catch (e) {
+          log('Failed to load settings: ' + e.message);
+        }
+      }
+    }
+
+    // Initialize Emblem Auth SDK
+    function initAuth() {
+      if (!window.EmblemAuth) {
+        log('ERROR: EmblemAuth SDK not loaded!');
+        return;
+      }
+
+      log('Initializing Emblem Auth SDK...');
+
+      authSDK = new window.EmblemAuth.EmblemAuthSDK({
+        appId: CONFIG.emblemAuthAppId,
+        apiUrl: CONFIG.emblemAuthApiUrl,
+        modalUrl: CONFIG.emblemAuthModalUrl,
+        onSuccess: (session) => {
+          log('Auth success! VaultId: ' + session.user?.vaultId);
+          handleAuthSuccess(session);
+        },
+        onError: (error) => {
+          log('Auth error: ' + error.message);
+          showError(error.message);
+        }
+      });
+
+      // Check for existing session
+      const existingSession = authSDK.getSession();
+      if (existingSession) {
+        log('Found existing session');
+        handleAuthSuccess(existingSession);
+      } else {
+        log('No existing session');
+      }
+    }
+
+    // Decode JWT payload (without verification)
+    function decodeJwt(token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(atob(parts[1]));
+        return payload;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Handle successful authentication
+    // Helper to truncate address
+    function truncateAddress(address) {
+      if (!address || address.length < 10) return address || '';
+      return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    }
+
+    // Copy to clipboard helper
+    window.copyToClipboard = async function(elementId, btn) {
+      const element = document.getElementById(elementId);
+      const text = element.textContent.replace('#', ''); // Remove # prefix from vault ID
+
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 1500);
+      } catch (err) {
+        log('Failed to copy: ' + err.message);
+      }
+    };
+
+    function handleAuthSuccess(session) {
+      // Get wallet/identifier from JWT claims
+      const jwtClaims = session.authToken ? decodeJwt(session.authToken) : null;
+      const identifier = jwtClaims?.identifier || session.user?.identifier || '';
+      const walletAddress = identifier.includes(':') ? identifier.split(':')[1] : identifier;
+      const vaultId = session.user?.vaultId || '';
+
+      // Update UI - show connected state
+      connectContainer.style.display = 'none';
+      connectedContainer.style.display = 'block';
+
+      // Update vault info display
+      shortAddressSpan.textContent = truncateAddress(walletAddress);
+      vaultIdDisplay.textContent = `#${vaultId}`;
+      walletDisplay.textContent = walletAddress;
+
+      // Store session info for debugging
+      const sessionWithClaims = {
+        ...session,
+        _jwtClaims: jwtClaims ? {
+          iss: jwtClaims.iss,
+          aud: jwtClaims.aud,
+          sub: jwtClaims.sub,
+          appId: jwtClaims.appId,
+          identifier: jwtClaims.identifier,
+          iat: jwtClaims.iat ? new Date(jwtClaims.iat * 1000).toISOString() : null,
+          exp: jwtClaims.exp ? new Date(jwtClaims.exp * 1000).toISOString() : null,
+          scope: jwtClaims.scope
+        } : null
+      };
+      sessionInfo.textContent = JSON.stringify(sessionWithClaims, null, 2);
+
+      // Create Hustle client with SDK auth
+      log('Creating HustleIncognitoClient with SDK auth (experimental)...');
+      hustleClient = new HustleIncognitoClient({
+        sdk: authSDK,
+        hustleApiUrl: CONFIG.hustleApiUrl,
+        debug: CONFIG.debug
+      });
+
+      // Subscribe to tool events
+      hustleClient.on('tool_start', (event) => {
+        clearToolChips(); // Clear previous tool before showing new one
+        addToolChip(event.toolCallId, event.toolName, event.args);
+      });
+      hustleClient.on('tool_end', (event) => {
+        // Mark as complete but keep visible
+        markToolComplete(event.toolCallId);
+      });
+      hustleClient.on('stream_end', (event) => {
+        showToolSummary(event.response);
+      });
+
+      // Expose test function for summarization debugging
+      window.testSummarization = () => {
+        console.log('=== TESTING SUMMARIZATION FLOW ===');
+
+        // Step 1: Simulate server response with thresholdReached
+        console.log('Step 1: Simulating server response with thresholdReached=true');
+        const fakePathInfo1 = {
+          type: 'token_usage',
+          thresholdReached: true,
+          messageRetentionCount: 1,
+          totalTokens: 25000,
+          threshold: 3000
+        };
+
+        // Manually call the internal update (for testing only)
+        hustleClient['updateSummarizationState'](fakePathInfo1);
+        console.log('Current state after step 1:', hustleClient.getSummarizationState());
+
+        // Step 2: Simulate what the SDK would send on next request
+        console.log('\nStep 2: Next request would include trimIndex:', hustleClient.getSummarizationState().messageRetentionCount);
+
+        // Step 3: Simulate server response WITH summary
+        console.log('\nStep 3: Simulating server response WITH summary');
+        const fakePathInfo2 = {
+          type: 'token_usage',
+          thresholdReached: false,
+          messageRetentionCount: 1,
+          totalTokens: 5000,
+          threshold: 3000,
+          summary: 'This is a test summary of the conversation. The user discussed various topics including quantum computing, naval warfare, and religious themes.',
+          summaryEndIndex: 5
+        };
+
+        hustleClient['updateSummarizationState'](fakePathInfo2);
+        console.log('Current state after step 3:', hustleClient.getSummarizationState());
+
+        console.log('\n=== TEST COMPLETE ===');
+        console.log('Final state:', JSON.stringify(hustleClient.getSummarizationState(), null, 2));
+
+        return hustleClient.getSummarizationState();
+      };
+
+      window.clearSummarizationState = () => {
+        hustleClient.clearSummarizationState();
+        console.log('Summarization state cleared:', hustleClient.getSummarizationState());
+      };
+
+      window.getSummarizationState = () => {
+        const state = hustleClient.getSummarizationState();
+        console.log('Current summarization state:', JSON.stringify(state, null, 2));
+        return state;
+      };
+
+      console.log('Test functions available: testSummarization(), getSummarizationState(), clearSummarizationState()');
+
+      // Enable chat and settings
+      messageInput.disabled = false;
+      sendBtn.disabled = false;
+      settingsBtn.disabled = false;
+      messagesDiv.innerHTML = '<div class="loading">Ready to chat! Type a message...</div>';
+
+      // Load models for settings
+      loadModels();
+
+      log(`Connected: vault #${vaultId}, wallet ${truncateAddress(walletAddress)}`);
+    }
+
+    // Handle logout
+    function handleLogout() {
+      if (authSDK) {
+        authSDK.logout();
+      }
+      hustleClient = null;
+
+      // Reset UI to disconnected state
+      connectContainer.style.display = 'flex';
+      connectedContainer.style.display = 'none';
+
+      // Reset vault info
+      shortAddressSpan.textContent = '0x0000...0000';
+      vaultIdDisplay.textContent = '#0';
+      walletDisplay.textContent = '';
+      sessionInfo.textContent = 'No active session';
+
+      // Disable chat and settings
+      messageInput.disabled = true;
+      sendBtn.disabled = true;
+      settingsBtn.disabled = true;
+      messages = [];
+      messagesDiv.innerHTML = '<div class="loading">Connect to start chatting...</div>';
+
+      // Clear attachments and models on logout
+      clearAttachments();
+      availableModels = [];
+      modelSelect.innerHTML = '<option value="">Default (server decides)</option>';
+
+      log('Disconnected');
+    }
+
+    // Render messages
+    // Configure marked for safe rendering
+    marked.setOptions({
+      breaks: true,
+      gfm: true
+    });
+
+    function renderMessages() {
+      if (messages.length === 0) {
+        messagesDiv.innerHTML = '<div class="loading">Ready to chat! Type a message...</div>';
+        return;
+      }
+
+      messagesDiv.innerHTML = messages.map(m => {
+        // Parse markdown for assistant messages, escape HTML for user messages
+        const content = m.role === 'assistant'
+          ? marked.parse(m.content || '')
+          : escapeHtml(m.content || '');
+        return `
+          <div class="message ${m.role}">
+            <div class="role">${m.role}</div>
+            <div class="message-content">${content}</div>
+          </div>
+        `;
+      }).join('');
+
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Helper to escape HTML in user messages
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Handle file selection and upload via SDK
+    async function handleFileUpload(files) {
+      if (!hustleClient) {
+        showError('Please login first to upload files');
+        return;
+      }
+
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) {
+          log('Skipping non-image file: ' + file.name);
+          continue;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+          showError(`File ${file.name} is too large. Maximum size is 5MB.`);
+          continue;
+        }
+
+        uploadStatus.textContent = `Uploading ${file.name}...`;
+        uploadStatus.style.display = 'inline';
+        log('Uploading file: ' + file.name);
+
+        try {
+          // Upload using the SDK's uploadFile method (accepts File in browser)
+          const attachment = await hustleClient.uploadFile(file);
+          uploadedAttachments.push(attachment);
+          log('Upload successful: ' + attachment.url);
+          renderUploadedFiles();
+        } catch (error) {
+          log('Upload failed: ' + error.message);
+          showError(`Failed to upload ${file.name}: ${error.message}`);
+        }
+      }
+
+      uploadStatus.style.display = 'none';
+      fileInput.value = '';
+    }
+
+    // Render uploaded files
+    function renderUploadedFiles() {
+      const count = uploadedAttachments.length;
+
+      if (count > 0) {
+        uploadArea.classList.add('has-files');
+      } else {
+        uploadArea.classList.remove('has-files');
+      }
+
+      uploadedFilesDiv.innerHTML = uploadedAttachments.map((attachment, index) => `
+        <div class="uploaded-file">
+          <img src="${attachment.url}" alt="${attachment.name}">
+          <span class="uploaded-file-name">${attachment.name}</span>
+          <button class="remove-file-btn" onclick="removeAttachment(${index})">x</button>
+        </div>
+      `).join('');
+    }
+
+    // Remove attachment
+    window.removeAttachment = function(index) {
+      uploadedAttachments.splice(index, 1);
+      renderUploadedFiles();
+      log('Removed attachment');
+    };
+
+    // Clear all attachments
+    function clearAttachments() {
+      uploadedAttachments = [];
+      renderUploadedFiles();
+    }
+
+    // Send a chat message with streaming
+    async function sendMessage() {
+      const content = messageInput.value.trim();
+      if (!content || !hustleClient) return;
+
+      messageInput.value = '';
+      sendBtn.disabled = true;
+      messageInput.disabled = true;
+
+      messages.push({ role: 'user', content });
+      renderMessages();
+
+      // Add empty assistant message that we'll stream into
+      messages.push({ role: 'assistant', content: '' });
+      renderMessages();
+
+      log('Sending message (streaming): ' + content.substring(0, 50) + '...');
+
+      try {
+        chatError.style.display = 'none';
+
+        // Build messages array with optional system prompt
+        const chatMessages = [];
+
+        // Add system prompt as first message if provided
+        if (settings.systemPrompt) {
+          chatMessages.push({ role: 'system', content: settings.systemPrompt });
+        }
+
+        // Add conversation history (excluding the empty assistant message we just added)
+        chatMessages.push(...messages.slice(0, -1).map(m => ({ role: m.role, content: m.content })));
+
+        // Use chatStream for real-time streaming
+        const chatOptions = {
+          messages: chatMessages,
+          processChunks: true
+        };
+
+        // Add model if selected
+        if (settings.model) {
+          chatOptions.model = settings.model;
+          log('Using model: ' + settings.model);
+        }
+
+        // Add overrideSystemPrompt if enabled
+        if (settings.skipServerPrompt) {
+          chatOptions.overrideSystemPrompt = true;
+          log('Overriding server-provided system prompt');
+        }
+
+        // Add attachments if any
+        if (uploadedAttachments.length > 0) {
+          chatOptions.attachments = [...uploadedAttachments];
+          log('Including ' + uploadedAttachments.length + ' attachment(s) in request');
+        }
+
+        const stream = hustleClient.chatStream(chatOptions);
+
+        // Clear attachments after adding to request
+        clearAttachments();
+
+        let fullContent = '';
+
+        for await (const chunk of stream) {
+          if (chunk.type === 'text') {
+            if (activeTools.size > 0) clearToolChips(); // Clear tool display when agent starts replying
+            fullContent += chunk.value;
+            // Update the last message with accumulated content
+            messages[messages.length - 1].content = fullContent;
+            renderMessages();
+          } else if (chunk.type === 'tool_call') {
+            log('Tool call: ' + JSON.stringify(chunk.value).substring(0, 100));
+          } else if (chunk.type === 'tool_result') {
+            log('Tool result received');
+          } else if (chunk.type === 'error') {
+            throw new Error(chunk.value?.message || 'Stream error');
+          }
+        }
+
+        // NEW: Access the aggregated ProcessedResponse after streaming
+        const processedResponse = await stream.response;
+        log('ProcessedResponse: ' + JSON.stringify(processedResponse, null, 2));
+
+        if (!fullContent) {
+          messages[messages.length - 1].content = '(No response)';
+          renderMessages();
+        }
+
+        log('Stream complete: ' + fullContent.substring(0, 50) + '...');
+      } catch (error) {
+        // Update assistant message with error
+        messages[messages.length - 1].content = '❌ Error: ' + error.message;
+        renderMessages();
+        showError(error.message);
+        log('Chat error: ' + error.message);
+      } finally {
+        sendBtn.disabled = false;
+        messageInput.disabled = false;
+        messageInput.focus();
+      }
+    }
+
+    // Show error
+    function showError(msg) {
+      chatError.textContent = msg;
+      chatError.style.display = 'block';
+    }
+
+    // Event listeners
+    loginBtn.addEventListener('click', () => {
+      log('Opening auth modal...');
+      authSDK.openAuthModal();
+    });
+
+    logoutBtn.addEventListener('click', handleLogout);
+
+    sendBtn.addEventListener('click', sendMessage);
+
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleFileUpload(e.target.files);
+      }
+    });
+
+    // Debug toggle
+    debugToggle.addEventListener('click', () => {
+      const isVisible = debugCard.style.display !== 'none';
+      debugCard.style.display = isVisible ? 'none' : 'block';
+      debugToggle.classList.toggle('active', !isVisible);
+    });
+
+    // Settings event listeners
+    settingsBtn.addEventListener('click', openSettings);
+    closeSettingsBtn.addEventListener('click', closeSettings);
+
+    // Close modal when clicking outside
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) closeSettings();
+    });
+
+    // Save settings on change
+    modelSelect.addEventListener('change', () => {
+      saveSettings();
+      updateModelInfo();
+    });
+
+    skipServerPromptToggle.addEventListener('change', saveSettings);
+
+    systemPromptModal.addEventListener('input', saveSettings);
+
+    // Fullscreen toggle
+    function toggleFullscreen() {
+      document.body.classList.toggle('fullscreen-mode');
+      const isFullscreen = document.body.classList.contains('fullscreen-mode');
+      log('Fullscreen mode: ' + isFullscreen);
+    }
+
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    // Initialize on load
+    log('Page loaded, initializing...');
+    loadSettings();
+    initAuth();
+  </script>
+</body>
+</html>
