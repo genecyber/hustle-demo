@@ -103,6 +103,7 @@ export const STORAGE_KEYS = {
   AUTH_SESSION: 'emblem_auth_session',
   HUSTLE_SETTINGS: 'hustle_settings',
   CHAT_HISTORY: 'hustle_chat_history',
+  PLUGINS: 'hustle-plugins',
 } as const;
 
 /**
@@ -113,3 +114,11 @@ export const DEFAULTS = {
   EMBLEM_API_URL: 'https://api.emblemvault.ai',
   EMBLEM_MODAL_URL: 'https://emblemvault.ai/connect',
 } as const;
+
+// Plugin registry
+export {
+  pluginRegistry,
+  registerKnownPlugin,
+  getKnownPlugins,
+  hydratePlugin,
+} from './pluginRegistry';

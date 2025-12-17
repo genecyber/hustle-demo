@@ -23,7 +23,6 @@ export type {
   ToolResult,
   Attachment,
   Model,
-  ToolCategory,
   ChatOptions,
   StreamOptions,
   StreamChunk,

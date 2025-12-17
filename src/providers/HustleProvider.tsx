@@ -7,12 +7,13 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import { HustleIncognitoClient } from 'hustle-incognito';
 import { useEmblemAuth } from './EmblemAuthProvider';
+import { usePlugins } from '../hooks/usePlugins';
 import type {
   Model,
-  ToolCategory,
   ChatOptions,
   StreamOptions,
   StreamChunk,
@@ -21,6 +22,7 @@ import type {
   HustleContextValue,
   HustleProviderProps,
   ChatMessage,
+  HydratedPlugin,
 } from '../types';
 
 /**
@@ -57,17 +59,66 @@ export function HustleProvider({
   // Get auth context - this provider REQUIRES EmblemAuthProvider
   const { authSDK, isAuthenticated } = useEmblemAuth();
 
+  // Get plugins
+  const { enabledPlugins } = usePlugins();
+
   // State
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [models, setModels] = useState<Model[]>([]);
-  const [tools, setTools] = useState<ToolCategory[]>([]);
 
-  // Settings state
-  const [selectedModel, setSelectedModel] = useState<string>('');
-  const [selectedTools, setSelectedTools] = useState<string[]>([]);
-  const [systemPrompt, setSystemPrompt] = useState<string>('');
-  const [skipServerPrompt, setSkipServerPrompt] = useState<boolean>(false);
+  // Track registered plugins to avoid re-registering
+  const registeredPluginsRef = useRef<Set<string>>(new Set());
+
+  // Settings storage key
+  const SETTINGS_KEY = 'hustle-settings';
+
+  // Load initial settings from localStorage
+  const loadSettings = () => {
+    if (typeof window === 'undefined') return { selectedModel: '', systemPrompt: '', skipServerPrompt: false };
+    try {
+      const stored = localStorage.getItem(SETTINGS_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return { selectedModel: '', systemPrompt: '', skipServerPrompt: false };
+  };
+
+  const initialSettings = loadSettings();
+
+  // Settings state (initialized from localStorage)
+  const [selectedModel, setSelectedModelState] = useState<string>(initialSettings.selectedModel);
+  const [systemPrompt, setSystemPromptState] = useState<string>(initialSettings.systemPrompt);
+  const [skipServerPrompt, setSkipServerPromptState] = useState<boolean>(initialSettings.skipServerPrompt);
+
+  // Persist settings to localStorage
+  const saveSettings = useCallback((settings: { selectedModel: string; systemPrompt: string; skipServerPrompt: boolean }) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  // Wrapped setters that also persist
+  const setSelectedModel = useCallback((value: string) => {
+    setSelectedModelState(value);
+    saveSettings({ selectedModel: value, systemPrompt, skipServerPrompt });
+  }, [systemPrompt, skipServerPrompt, saveSettings]);
+
+  const setSystemPrompt = useCallback((value: string) => {
+    setSystemPromptState(value);
+    saveSettings({ selectedModel, systemPrompt: value, skipServerPrompt });
+  }, [selectedModel, skipServerPrompt, saveSettings]);
+
+  const setSkipServerPrompt = useCallback((value: boolean) => {
+    setSkipServerPromptState(value);
+    saveSettings({ selectedModel, systemPrompt, skipServerPrompt: value });
+  }, [selectedModel, systemPrompt, saveSettings]);
 
   // Debug logger
   const log = useCallback(
@@ -123,6 +174,55 @@ export function HustleProvider({
   const isReady = client !== null;
 
   /**
+   * Register enabled plugins with the client
+   */
+  useEffect(() => {
+    if (!client) return;
+
+    const registerPlugins = async () => {
+      // Get the set of enabled plugin names
+      const enabledNames = new Set(enabledPlugins.map(p => p.name));
+
+      // Unregister plugins that were disabled
+      for (const name of registeredPluginsRef.current) {
+        if (!enabledNames.has(name)) {
+          log('Unregistering plugin:', name);
+          // Note: SDK may not support unregistering - just track locally
+          registeredPluginsRef.current.delete(name);
+        }
+      }
+
+      // Register new plugins
+      for (const plugin of enabledPlugins) {
+        if (!registeredPluginsRef.current.has(plugin.name)) {
+          log('Registering plugin:', plugin.name);
+          try {
+            // The SDK's use() method registers the plugin
+            if (plugin.executors || plugin.hooks) {
+              // Cast to SDK's expected type (our types are compatible but TS is strict)
+              await client.use({
+                name: plugin.name,
+                version: plugin.version,
+                tools: plugin.tools,
+                executors: plugin.executors,
+                hooks: plugin.hooks,
+              } as Parameters<typeof client.use>[0]);
+              registeredPluginsRef.current.add(plugin.name);
+              log('Plugin registered:', plugin.name);
+            } else {
+              log('Plugin has no executors/hooks, skipping registration:', plugin.name);
+            }
+          } catch (err) {
+            log('Failed to register plugin:', plugin.name, err);
+          }
+        }
+      }
+    };
+
+    registerPlugins();
+  }, [client, enabledPlugins, log]);
+
+  /**
    * Load available models
    */
   const loadModels = useCallback(async (): Promise<Model[]> => {
@@ -149,40 +249,13 @@ export function HustleProvider({
   }, [client, log]);
 
   /**
-   * Load available tools
-   */
-  const loadTools = useCallback(async (): Promise<ToolCategory[]> => {
-    if (!client) {
-      log('Cannot load tools - client not ready');
-      return [];
-    }
-
-    log('Loading tools');
-    setIsLoading(true);
-
-    try {
-      const toolList = await client.getTools();
-      setTools(toolList as ToolCategory[]);
-      log('Loaded tools:', toolList.length);
-      return toolList as ToolCategory[];
-    } catch (err) {
-      log('Failed to load tools:', err);
-      setError(err instanceof Error ? err : new Error('Failed to load tools'));
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  }, [client, log]);
-
-  /**
-   * Load models and tools when client becomes ready
+   * Load models when client becomes ready
    */
   useEffect(() => {
     if (client) {
       loadModels();
-      loadTools();
     }
-  }, [client, loadModels, loadTools]);
+  }, [client, loadModels]);
 
   /**
    * Send a chat message (non-streaming)
@@ -217,9 +290,6 @@ export function HustleProvider({
         if (options.attachments) {
           sdkOptions.attachments = options.attachments;
         }
-        if (options.selectedToolCategories || selectedTools.length > 0) {
-          sdkOptions.selectedToolCategories = options.selectedToolCategories || selectedTools;
-        }
 
         // Call the SDK - it accepts an options object
         const response = await (client as unknown as { chat: (opts: Record<string, unknown>) => Promise<unknown> }).chat(sdkOptions);
@@ -234,7 +304,7 @@ export function HustleProvider({
         setIsLoading(false);
       }
     },
-    [client, selectedModel, selectedTools, systemPrompt, skipServerPrompt, log]
+    [client, selectedModel, systemPrompt, skipServerPrompt, log]
   );
 
   /**
@@ -271,9 +341,6 @@ export function HustleProvider({
       }
       if (options.attachments) {
         sdkOptions.attachments = options.attachments;
-      }
-      if (options.selectedToolCategories || selectedTools.length > 0) {
-        sdkOptions.selectedToolCategories = options.selectedToolCategories || selectedTools;
       }
 
       // Get the stream from the client (cast through unknown for SDK compatibility)
@@ -316,7 +383,7 @@ export function HustleProvider({
         },
       };
     },
-    [client, selectedModel, selectedTools, systemPrompt, skipServerPrompt, log]
+    [client, selectedModel, systemPrompt, skipServerPrompt, log]
   );
 
   /**
@@ -354,7 +421,6 @@ export function HustleProvider({
     isLoading,
     error,
     models,
-    tools,
 
     // Client (for advanced use)
     client,
@@ -368,13 +434,10 @@ export function HustleProvider({
 
     // Data fetching
     loadModels,
-    loadTools,
 
     // Settings
     selectedModel,
     setSelectedModel,
-    selectedTools,
-    setSelectedTools,
     systemPrompt,
     setSystemPrompt,
     skipServerPrompt,

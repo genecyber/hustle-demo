@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hooks/Components Test</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/emblem-auth-sdk@latest/dist/emblem-auth.min.js"></script>
+  <script type="module">
+    import { HustleIncognitoClient } from 'https://unpkg.com/hustle-incognito@latest/dist/browser/hustle-incognito.esm.js';
+    window.HustleIncognitoClient = HustleIncognitoClient;
+  </script>
+  <style>
+    body { font-family: system-ui; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0; }
+    .success { background: #d4edda; border-color: #c3e6cb; }
+    .error { background: #f8d7da; border-color: #f5c6cb; }
+    .pending { background: #fff3cd; border-color: #ffeeba; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Hooks & Components Test</h1>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, createContext, useContext, useCallback, useMemo, useRef } = React;
+
+    // =========================================================================
+    // Inline the providers/hooks for testing (normally you'd import from dist)
+    // =========================================================================
+
+    // Global SDK instance
+    let globalAuthSDK = null;
+
+    // Auth Context
+    const AuthContext = createContext(null);
+
+    function EmblemAuthProvider({ children, appId, apiUrl, modalUrl }) {
+      const [session, setSession] = useState(null);
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [isLoading, setIsLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [authSDK, setAuthSDK] = useState(null);
+
+      useEffect(() => {
+        if (globalAuthSDK) {
+          setAuthSDK(globalAuthSDK);
+          const existing = globalAuthSDK.getSession();
+          if (existing) {
+            setSession(existing);
+            setIsAuthenticated(true);
+          }
+          return;
+        }
+
+        console.log('[Test] Initializing EmblemAuthSDK...');
+        const sdk = new window.EmblemAuth.EmblemAuthSDK({
+          appId,
+          apiUrl,
+          modalUrl,
+          onSuccess: (newSession) => {
+            console.log('[Test] Auth success:', newSession);
+            setSession(newSession);
+            setIsAuthenticated(true);
+            setIsLoading(false);
+          },
+          onError: (err) => {
+            console.log('[Test] Auth error:', err);
+            setError(err);
+            setIsLoading(false);
+          }
+        });
+
+        globalAuthSDK = sdk;
+        setAuthSDK(sdk);
+
+        const existing = sdk.getSession();
+        if (existing) {
+          setSession(existing);
+          setIsAuthenticated(true);
+        }
+      }, [appId, apiUrl, modalUrl]);
+
+      const openAuthModal = useCallback(async () => {
+        if (!authSDK) return;
+        setIsLoading(true);
+        setError(null);
+        try {
+          await authSDK.openAuthModal();
+        } catch (err) {
+          setError(err);
+          setIsLoading(false);
+        }
+      }, [authSDK]);
+
+      const logout = useCallback(() => {
+        if (!authSDK) return;
+        authSDK.logout();
+        setSession(null);
+        setIsAuthenticated(false);
+      }, [authSDK]);
+
+      return (
+        <AuthContext.Provider value={{
+          session,
+          isAuthenticated,
+          isLoading,
+          error,
+          authSDK,
+          openAuthModal,
+          logout,
+          vaultId: session?.user?.vaultId || null,
+          walletAddress: session?.user?.evmAddress || null,
+        }}>
+          {children}
+        </AuthContext.Provider>
+      );
+    }
+
+    function useEmblemAuth() {
+      const ctx = useContext(AuthContext);
+      if (!ctx) throw new Error('useEmblemAuth must be within EmblemAuthProvider');
+      return ctx;
+    }
+
+    // Hustle Context
+    const HustleContext = createContext(null);
+
+    function HustleProvider({ children, hustleApiUrl }) {
+      const { authSDK, isAuthenticated } = useEmblemAuth();
+      const [isReady, setIsReady] = useState(false);
+      const [client, setClient] = useState(null);
+      const [models, setModels] = useState([]);
+
+      useEffect(() => {
+        if (!authSDK || !isAuthenticated || !window.HustleIncognitoClient) {
+          setIsReady(false);
+          setClient(null);
+          return;
+        }
+
+        console.log('[Test] Creating HustleIncognitoClient with sdk: authSDK');
+        try {
+          const hustleClient = new window.HustleIncognitoClient({
+            sdk: authSDK,  // THE CORRECT PATTERN!
+            hustleApiUrl,
+            debug: true,
+          });
+          setClient(hustleClient);
+          setIsReady(true);
+
+          // Load models
+          hustleClient.getModels().then(m => {
+            console.log('[Test] Loaded models:', m.length);
+            setModels(m);
+          }).catch(console.error);
+        } catch (err) {
+          console.error('[Test] Failed to create client:', err);
+        }
+      }, [authSDK, isAuthenticated, hustleApiUrl]);
+
+      return (
+        <HustleContext.Provider value={{ isReady, client, models }}>
+          {children}
+        </HustleContext.Provider>
+      );
+    }
+
+    function useHustle() {
+      const ctx = useContext(HustleContext);
+      if (!ctx) throw new Error('useHustle must be within HustleProvider');
+      return ctx;
+    }
+
+    // =========================================================================
+    // Test Components
+    // =========================================================================
+
+    function TestCard({ title, status, children }) {
+      const statusClass = status === 'success' ? 'success' : status === 'error' ? 'error' : 'pending';
+      return (
+        <div className={`card ${statusClass}`}>
+          <h3>{title}: {status.toUpperCase()}</h3>
+          {children}
+        </div>
+      );
+    }
+
+    function AuthTest() {
+      const auth = useEmblemAuth();
+
+      return (
+        <TestCard
+          title="Auth Hook"
+          status={auth.isAuthenticated ? 'success' : auth.error ? 'error' : 'pending'}
+        >
+          <p><strong>isAuthenticated:</strong> {String(auth.isAuthenticated)}</p>
+          <p><strong>isLoading:</strong> {String(auth.isLoading)}</p>
+          <p><strong>vaultId:</strong> {auth.vaultId || 'null'}</p>
+          <p><strong>walletAddress:</strong> {auth.walletAddress || 'null'}</p>
+          <p><strong>authSDK:</strong> {auth.authSDK ? 'initialized' : 'null'}</p>
+          {auth.error && <p><strong>error:</strong> {auth.error.message}</p>}
+
+          <div>
+            {!auth.isAuthenticated ? (
+              <button onClick={auth.openAuthModal} disabled={auth.isLoading}>
+                {auth.isLoading ? 'Connecting...' : 'Connect'}
+              </button>
+            ) : (
+              <button onClick={auth.logout}>Disconnect</button>
+            )}
+          </div>
+        </TestCard>
+      );
+    }
+
+    function HustleTest() {
+      const { isReady, client, models } = useHustle();
+      const { isAuthenticated } = useEmblemAuth();
+      const [testResult, setTestResult] = useState(null);
+
+      const testChat = async () => {
+        if (!client) return;
+        setTestResult('Testing...');
+        try {
+          const stream = client.chatStream({
+            messages: [{ role: 'user', content: 'Say "test successful" in exactly 2 words.' }],
+            processChunks: true,
+          });
+
+          let response = '';
+          for await (const chunk of stream) {
+            if (chunk.type === 'text') {
+              response += chunk.value;
+            }
+          }
+          setTestResult(`Response: "${response.substring(0, 100)}..."`);
+        } catch (err) {
+          setTestResult(`Error: ${err.message}`);
+        }
+      };
+
+      if (!isAuthenticated) {
+        return (
+          <TestCard title="Hustle Hook" status="pending">
+            <p>Authenticate first to test Hustle SDK</p>
+          </TestCard>
+        );
+      }
+
+      return (
+        <TestCard
+          title="Hustle Hook"
+          status={isReady ? 'success' : 'pending'}
+        >
+          <p><strong>isReady:</strong> {String(isReady)}</p>
+          <p><strong>client:</strong> {client ? 'created with sdk: authSDK ✓' : 'null'}</p>
+          <p><strong>models loaded:</strong> {models.length}</p>
+
+          {isReady && (
+            <div>
+              <button onClick={testChat}>Test Chat Stream</button>
+              {testResult && <pre>{testResult}</pre>}
+            </div>
+          )}
+        </TestCard>
+      );
+    }
+
+    function ProviderTest() {
+      return (
+        <TestCard title="Provider Hierarchy" status="success">
+          <pre>{`
+EmblemAuthProvider (standalone)
+  └── HustleProvider (uses authSDK from context)
+        └── Components use hooks
+          `}</pre>
+          <p>✓ Auth is first-class citizen</p>
+          <p>✓ Hustle depends on Auth (not reverse)</p>
+          <p>✓ Uses sdk: authSDK pattern (not apiKey)</p>
+        </TestCard>
+      );
+    }
+
+    // =========================================================================
+    // App
+    // =========================================================================
+
+    function App() {
+      return (
+        <EmblemAuthProvider
+          appId="demo-app-id"
+          apiUrl="https://dev-api.emblemvault.ai"
+          modalUrl="https://dev-auth.emblemvault.ai/connect"
+        >
+          <HustleProvider hustleApiUrl="https://dev.agenthustle.ai">
+            <ProviderTest />
+            <AuthTest />
+            <HustleTest />
+          </HustleProvider>
+        </EmblemAuthProvider>
+      );
+    }
+
+    // Wait for HustleIncognitoClient to load
+    function init() {
+      if (window.HustleIncognitoClient) {
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+      } else {
+        setTimeout(init, 100);
+      }
+    }
+    init();
+  </script>
+</body>
+</html>

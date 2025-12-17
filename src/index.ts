@@ -61,6 +61,8 @@ export type { HustleChatProps } from './components/HustleChat';
 // Already exported from providers, but also available from hooks directory
 export * from './hooks/useEmblemAuth';
 export * from './hooks/useHustle';
+export { usePlugins } from './hooks/usePlugins';
+export type { UsePluginsReturn } from './hooks/usePlugins';
 
 // ============================================================================
 // Types
@@ -81,7 +83,6 @@ export type {
   ToolResult,
   Attachment,
   Model,
-  ToolCategory,
   ChatOptions,
   StreamOptions,
   StreamChunk,
@@ -92,6 +93,19 @@ export type {
   HustleConfig,
   HustleContextValue,
   HustleProviderProps,
+
+  // Plugin types
+  JSONSchema,
+  JSONSchemaProperty,
+  ClientToolDefinition,
+  ToolExecutor,
+  HustleRequest,
+  ProcessedResponse,
+  ErrorContext,
+  PluginHooks,
+  HustlePlugin,
+  StoredPlugin,
+  HydratedPlugin,
 } from './types';
 
 // ============================================================================
@@ -108,4 +122,21 @@ export {
   debounce,
   STORAGE_KEYS,
   DEFAULTS,
+  // Plugin utilities
+  pluginRegistry,
+  registerKnownPlugin,
+  getKnownPlugins,
+  hydratePlugin,
 } from './utils';
+
+// ============================================================================
+// Plugins
+// ============================================================================
+
+export {
+  availablePlugins,
+  getAvailablePlugin,
+  predictionMarketPlugin,
+  migrateFunPlugin,
+} from './plugins';
+export type { AvailablePlugin } from './plugins';

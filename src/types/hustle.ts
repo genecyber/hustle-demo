@@ -72,7 +72,6 @@ export interface ChatOptions {
   systemPrompt?: string;
   overrideSystemPrompt?: boolean;
   attachments?: Attachment[];
-  selectedToolCategories?: string[];
 }
 
 /**
@@ -165,7 +164,6 @@ export interface HustleContextValue {
   isLoading: boolean;
   error: Error | null;
   models: Model[];
-  tools: ToolCategory[];
 
   // Client reference (for advanced use)
   client: HustleIncognitoClient | null;
@@ -179,13 +177,10 @@ export interface HustleContextValue {
 
   // Data fetching
   loadModels: () => Promise<Model[]>;
-  loadTools: () => Promise<ToolCategory[]>;
 
   // Settings state
   selectedModel: string;
   setSelectedModel: (model: string) => void;
-  selectedTools: string[];
-  setSelectedTools: (tools: string[]) => void;
   systemPrompt: string;
   setSystemPrompt: (prompt: string) => void;
   skipServerPrompt: boolean;

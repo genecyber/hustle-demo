@@ -19,7 +19,6 @@ export type {
   ToolResult,
   Attachment,
   Model,
-  ToolCategory,
   ChatOptions,
   StreamOptions,
   StreamChunk,
@@ -31,3 +30,18 @@ export type {
   HustleContextValue,
   HustleProviderProps,
 } from './hustle';
+
+// Plugin types
+export type {
+  JSONSchema,
+  JSONSchemaProperty,
+  ClientToolDefinition,
+  ToolExecutor,
+  HustleRequest,
+  ProcessedResponse,
+  ErrorContext,
+  PluginHooks,
+  HustlePlugin,
+  StoredPlugin,
+  HydratedPlugin,
+} from './plugin';

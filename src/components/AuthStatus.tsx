@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { useEmblemAuth } from '../providers/EmblemAuthProvider';
+import { tokens, presets, animations } from '../styles';
 
 /**
  * Props for AuthStatus component
@@ -9,12 +10,12 @@ import { useEmblemAuth } from '../providers/EmblemAuthProvider';
 export interface AuthStatusProps {
   /** Additional CSS classes */
   className?: string;
+  /** Additional inline styles */
+  style?: React.CSSProperties;
   /** Show expandable vault details */
   showVaultInfo?: boolean;
   /** Show logout button */
   showLogout?: boolean;
-  /** Compact mode - less padding, smaller text */
-  compact?: boolean;
 }
 
 /**
@@ -37,29 +38,131 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+// Styles using design tokens
+const s = {
+  container: {
+    position: 'relative' as const,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+    fontFamily: tokens.typography.fontFamily,
+  },
+  disconnected: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+    color: tokens.colors.textSecondary,
+    fontSize: tokens.typography.fontSizeMd,
+  },
+  dot: {
+    display: 'inline-block',
+    width: '8px',
+    height: '8px',
+    borderRadius: tokens.radius.full,
+    backgroundColor: tokens.colors.textTertiary,
+  },
+  dotConnected: {
+    backgroundColor: tokens.colors.accentSuccess,
+  },
+  spinner: {
+    display: 'inline-block',
+    width: '12px',
+    height: '12px',
+    border: `2px solid ${tokens.colors.textSecondary}`,
+    borderTopColor: 'transparent',
+    borderRadius: tokens.radius.full,
+    animation: 'hustle-spin 0.8s linear infinite',
+  },
+  logoutBtn: {
+    ...presets.buttonIcon,
+    border: `1px solid ${tokens.colors.borderSecondary}`,
+    borderRadius: tokens.radius.lg,
+    transition: `all ${tokens.transitions.normal}`,
+  } as React.CSSProperties,
+  logoutBtnHover: {
+    borderColor: tokens.colors.accentError,
+    color: tokens.colors.accentError,
+  },
+  vaultInfoWrapper: {
+    position: 'relative' as const,
+  },
+  vaultInfo: {
+    position: 'absolute' as const,
+    top: '100%',
+    right: 0,
+    marginTop: tokens.spacing.sm,
+    background: tokens.colors.bgSecondary,
+    border: `1px solid ${tokens.colors.borderPrimary}`,
+    borderRadius: tokens.radius.xl,
+    padding: tokens.spacing.lg,
+    minWidth: '380px',
+    zIndex: tokens.zIndex.dropdown,
+    boxShadow: tokens.shadows.lg,
+  },
+  vaultInfoHeader: {
+    fontSize: tokens.typography.fontSizeXs,
+    fontWeight: tokens.typography.fontWeightSemibold,
+    color: tokens.colors.textSecondary,
+    letterSpacing: '0.5px',
+    marginBottom: tokens.spacing.lg,
+    textTransform: 'uppercase' as const,
+  },
+  vaultInfoRow: {
+    marginBottom: tokens.spacing.md,
+  },
+  vaultLabel: {
+    display: 'block',
+    fontSize: '12px',
+    color: tokens.colors.textTertiary,
+    marginBottom: tokens.spacing.xs,
+  },
+  vaultValueRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacing.sm,
+  },
+  vaultValue: {
+    fontSize: tokens.typography.fontSizeMd,
+    color: tokens.colors.textPrimary,
+    fontWeight: tokens.typography.fontWeightMedium,
+    flex: 1,
+  },
+  vaultValueMono: {
+    ...presets.mono,
+    wordBreak: 'break-all' as const,
+  },
+  copyBtn: {
+    background: 'transparent',
+    border: `1px solid ${tokens.colors.borderSecondary}`,
+    color: tokens.colors.textSecondary,
+    padding: `${tokens.spacing.xs} ${tokens.spacing.sm}`,
+    borderRadius: tokens.radius.sm,
+    cursor: 'pointer',
+    fontSize: tokens.typography.fontSizeXs,
+    transition: `all ${tokens.transitions.normal}`,
+    whiteSpace: 'nowrap' as const,
+  },
+  copyBtnHover: {
+    background: tokens.colors.bgHover,
+    borderColor: tokens.colors.accentPrimary,
+    color: tokens.colors.accentPrimary,
+  },
+  copyBtnCopied: {
+    background: tokens.colors.accentSuccess,
+    borderColor: tokens.colors.accentSuccess,
+    color: tokens.colors.textInverse,
+  },
+};
+
 /**
  * AuthStatus - Displays current authentication status and vault info
- *
- * @example Basic usage
- * ```tsx
- * <AuthStatus />
- * ```
- *
- * @example With vault info and logout
- * ```tsx
- * <AuthStatus showVaultInfo showLogout />
- * ```
- *
- * @example Compact mode
- * ```tsx
- * <AuthStatus compact />
- * ```
  */
 export function AuthStatus({
   className = '',
+  style,
   showVaultInfo = false,
   showLogout = false,
-  compact = false,
 }: AuthStatusProps) {
   const {
     isAuthenticated,
@@ -70,8 +173,10 @@ export function AuthStatus({
     logout,
   } = useEmblemAuth();
 
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [logoutHovered, setLogoutHovered] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [copyHovered, setCopyHovered] = useState<string | null>(null);
 
   const handleCopy = useCallback(async (field: string, value: string) => {
     const success = await copyToClipboard(value);
@@ -81,186 +186,166 @@ export function AuthStatus({
     }
   }, []);
 
-  // Not authenticated - show nothing or disconnected state
+  // Not authenticated
   if (!isAuthenticated) {
     if (isLoading) {
       return (
-        <div className={`inline-flex items-center gap-2 text-gray-500 ${className}`}>
-          <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          <span className={compact ? 'text-xs' : 'text-sm'}>Connecting...</span>
-        </div>
+        <>
+          <style>{animations}</style>
+          <div className={className} style={{ ...s.disconnected, ...style }}>
+            <span style={s.spinner} />
+            <span>Connecting...</span>
+          </div>
+        </>
       );
     }
 
     return (
-      <div className={`inline-flex items-center gap-2 text-gray-400 ${className}`}>
-        <span className={`inline-block w-2 h-2 rounded-full bg-gray-400`} />
-        <span className={compact ? 'text-xs' : 'text-sm'}>Not connected</span>
+      <div className={className} style={{ ...s.disconnected, ...style }}>
+        <span style={s.dot} />
+        <span>Not connected</span>
       </div>
     );
   }
 
-  // Authenticated - show status
-  const padding = compact ? 'px-2 py-1' : 'px-3 py-2';
-  const textSize = compact ? 'text-xs' : 'text-sm';
-
+  // Authenticated
   return (
-    <div className={`relative ${className}`}>
-      {/* Connected indicator */}
-      <button
-        type="button"
-        onClick={() => showVaultInfo && setIsExpanded(!isExpanded)}
-        className={`
-          inline-flex items-center gap-2 ${padding} rounded-lg
-          bg-green-50 text-green-700 border border-green-200
-          ${showVaultInfo ? 'cursor-pointer hover:bg-green-100' : 'cursor-default'}
-          transition-colors
-        `}
-      >
-        <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-        <span className={textSize}>Connected</span>
-        <span className={`${textSize} font-mono opacity-75`}>
-          {truncateAddress(walletAddress || '')}
-        </span>
-        {showVaultInfo && (
-          <span className={`${textSize} opacity-50`}>
-            {isExpanded ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
-
-      {/* Logout button */}
-      {showLogout && (
-        <button
-          type="button"
-          onClick={logout}
-          className={`
-            ml-2 ${padding} rounded-lg ${textSize}
-            text-gray-500 hover:text-gray-700 hover:bg-gray-100
-            transition-colors
-          `}
-          title="Disconnect"
+    <>
+      <style>{animations}</style>
+      <div className={className} style={{ ...s.container, ...style }}>
+        {/* Vault info wrapper for hover effect */}
+        <div
+          style={s.vaultInfoWrapper}
+          onMouseEnter={() => showVaultInfo && setIsHovered(true)}
+          onMouseLeave={() => showVaultInfo && setIsHovered(false)}
         >
-          ⏻
-        </button>
-      )}
+          {/* Connected indicator - just a dot */}
+          <span style={{ ...s.dot, ...s.dotConnected }} title="Connected" />
 
-      {/* Vault info dropdown */}
-      {showVaultInfo && isExpanded && (
-        <div className={`
-          absolute top-full left-0 mt-1 z-50
-          bg-white rounded-lg shadow-lg border border-gray-200
-          min-w-[280px] ${textSize}
-        `}>
-          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 font-medium text-gray-600 uppercase text-xs tracking-wide">
-            Vault Information
-          </div>
+          {/* Vault info dropdown on hover */}
+          {showVaultInfo && isHovered && (
+            <div style={s.vaultInfo}>
+              <div style={s.vaultInfoHeader}>Vault Information</div>
 
-          <div className="p-3 space-y-3">
-            {/* Vault ID */}
-            <InfoRow
-              label="Vault ID"
-              value={`#${vaultId}`}
-              onCopy={() => handleCopy('vaultId', vaultId || '')}
-              isCopied={copiedField === 'vaultId'}
-            />
+              {/* Vault ID */}
+              <div style={s.vaultInfoRow}>
+                <span style={s.vaultLabel}>Vault ID</span>
+                <div style={s.vaultValueRow}>
+                  <span style={s.vaultValue}>#{vaultId}</span>
+                  <CopyButton
+                    field="vaultId"
+                    value={vaultId || ''}
+                    copiedField={copiedField}
+                    copyHovered={copyHovered}
+                    setCopyHovered={setCopyHovered}
+                    onCopy={handleCopy}
+                  />
+                </div>
+              </div>
 
-            {/* Connected Wallet */}
-            <InfoRow
-              label="Connected Wallet"
-              value={walletAddress || ''}
-              displayValue={truncateAddress(walletAddress || '')}
-              onCopy={() => handleCopy('wallet', walletAddress || '')}
-              isCopied={copiedField === 'wallet'}
-              mono
-            />
+              {/* Connected Wallet */}
+              <div style={s.vaultInfoRow}>
+                <span style={s.vaultLabel}>Connected Wallet</span>
+                <div style={s.vaultValueRow}>
+                  <span style={{ ...s.vaultValue, ...s.vaultValueMono }}>{walletAddress}</span>
+                  <CopyButton
+                    field="wallet"
+                    value={walletAddress || ''}
+                    copiedField={copiedField}
+                    copyHovered={copyHovered}
+                    setCopyHovered={setCopyHovered}
+                    onCopy={handleCopy}
+                  />
+                </div>
+              </div>
 
-            {/* Vault EVM Address */}
-            {vaultInfo?.evmAddress && (
-              <InfoRow
-                label="Vault EVM Address"
-                value={vaultInfo.evmAddress}
-                displayValue={truncateAddress(vaultInfo.evmAddress)}
-                onCopy={() => handleCopy('evmAddress', vaultInfo.evmAddress!)}
-                isCopied={copiedField === 'evmAddress'}
-                mono
-              />
-            )}
+              {/* EVM Address */}
+              {vaultInfo?.evmAddress && (
+                <div style={s.vaultInfoRow}>
+                  <span style={s.vaultLabel}>Vault EVM Address</span>
+                  <div style={s.vaultValueRow}>
+                    <span style={{ ...s.vaultValue, ...s.vaultValueMono }}>{vaultInfo.evmAddress}</span>
+                    <CopyButton
+                      field="evmAddress"
+                      value={vaultInfo.evmAddress}
+                      copiedField={copiedField}
+                      copyHovered={copyHovered}
+                      setCopyHovered={setCopyHovered}
+                      onCopy={handleCopy}
+                    />
+                  </div>
+                </div>
+              )}
 
-            {/* Vault Solana Address */}
-            {vaultInfo?.solanaAddress && (
-              <InfoRow
-                label="Vault Solana Address"
-                value={vaultInfo.solanaAddress}
-                displayValue={truncateAddress(vaultInfo.solanaAddress)}
-                onCopy={() => handleCopy('solAddress', vaultInfo.solanaAddress!)}
-                isCopied={copiedField === 'solAddress'}
-                mono
-              />
-            )}
-
-            {/* Hedera Account */}
-            {vaultInfo?.hederaAccountId && (
-              <InfoRow
-                label="Hedera Account"
-                value={vaultInfo.hederaAccountId}
-                onCopy={() => handleCopy('hedera', vaultInfo.hederaAccountId!)}
-                isCopied={copiedField === 'hedera'}
-              />
-            )}
-
-            {/* Created At */}
-            {vaultInfo?.createdAt && (
-              <InfoRow
-                label="Created"
-                value={new Date(vaultInfo.createdAt).toLocaleDateString()}
-              />
-            )}
-          </div>
+              {/* Solana Address */}
+              {vaultInfo?.solanaAddress && (
+                <div style={s.vaultInfoRow}>
+                  <span style={s.vaultLabel}>Vault Solana Address</span>
+                  <div style={s.vaultValueRow}>
+                    <span style={{ ...s.vaultValue, ...s.vaultValueMono }}>{vaultInfo.solanaAddress}</span>
+                    <CopyButton
+                      field="solAddress"
+                      value={vaultInfo.solanaAddress}
+                      copiedField={copiedField}
+                      copyHovered={copyHovered}
+                      setCopyHovered={setCopyHovered}
+                      onCopy={handleCopy}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
-    </div>
-  );
-}
 
-/**
- * Helper component for info rows
- */
-interface InfoRowProps {
-  label: string;
-  value: string;
-  displayValue?: string;
-  onCopy?: () => void;
-  isCopied?: boolean;
-  mono?: boolean;
-}
-
-function InfoRow({ label, value, displayValue, onCopy, isCopied, mono }: InfoRowProps) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-gray-500 text-xs">{label}</span>
-      <div className="flex items-center gap-2">
-        <span className={`text-gray-900 ${mono ? 'font-mono text-xs' : ''}`}>
-          {displayValue || value}
-        </span>
-        {onCopy && (
+        {/* Logout button */}
+        {showLogout && (
           <button
             type="button"
-            onClick={onCopy}
-            className={`
-              px-2 py-0.5 text-xs rounded
-              ${isCopied
-                ? 'bg-green-100 text-green-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }
-              transition-colors
-            `}
+            onClick={logout}
+            style={{
+              ...s.logoutBtn,
+              ...(logoutHovered ? s.logoutBtnHover : {}),
+            }}
+            onMouseEnter={() => setLogoutHovered(true)}
+            onMouseLeave={() => setLogoutHovered(false)}
+            title="Disconnect"
           >
-            {isCopied ? 'Copied!' : 'Copy'}
+            ⏻
           </button>
         )}
       </div>
-    </div>
+    </>
+  );
+}
+
+// Copy button helper
+interface CopyButtonProps {
+  field: string;
+  value: string;
+  copiedField: string | null;
+  copyHovered: string | null;
+  setCopyHovered: (field: string | null) => void;
+  onCopy: (field: string, value: string) => void;
+}
+
+function CopyButton({ field, value, copiedField, copyHovered, setCopyHovered, onCopy }: CopyButtonProps) {
+  const isCopied = copiedField === field;
+  const isHovered = copyHovered === field;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onCopy(field, value)}
+      style={{
+        ...s.copyBtn,
+        ...(isCopied ? s.copyBtnCopied : isHovered ? s.copyBtnHover : {}),
+      }}
+      onMouseEnter={() => setCopyHovered(field)}
+      onMouseLeave={() => setCopyHovered(null)}
+    >
+      {isCopied ? 'Copied!' : 'Copy'}
+    </button>
   );
 }
 

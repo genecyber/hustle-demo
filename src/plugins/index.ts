@@ -1,0 +1,50 @@
+/**
+ * Plugin Registry
+ *
+ * Available plugins that can be installed by users.
+ * This is a hardcoded registry for the PoC - in the future
+ * this could be fetched from a remote plugin marketplace.
+ */
+
+import { predictionMarketPlugin } from './predictionMarket';
+import { migrateFunPlugin } from './migrateFun';
+import { registerKnownPlugin } from '../utils/pluginRegistry';
+import type { HustlePlugin } from '../types';
+
+// Register all available plugins for hydration on page load
+// This ensures executors are available when loading from localStorage
+registerKnownPlugin(predictionMarketPlugin);
+registerKnownPlugin(migrateFunPlugin);
+
+/**
+ * Available plugin with display metadata
+ */
+export interface AvailablePlugin extends HustlePlugin {
+  /** Short description for UI display */
+  description: string;
+}
+
+/**
+ * All available plugins that can be installed
+ */
+export const availablePlugins: AvailablePlugin[] = [
+  {
+    ...predictionMarketPlugin,
+    description: 'Search and analyze Polymarket and Kalshi prediction markets',
+  },
+  {
+    ...migrateFunPlugin,
+    description: 'Search Migrate.fun knowledge base for token migration answers',
+  },
+];
+
+/**
+ * Get an available plugin by name
+ */
+export function getAvailablePlugin(name: string): AvailablePlugin | undefined {
+  return availablePlugins.find(p => p.name === name);
+}
+
+// Re-export individual plugins
+export { predictionMarketPlugin };
+export { migrateFunPlugin };

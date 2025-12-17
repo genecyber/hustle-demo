@@ -2,6 +2,10 @@
 
 React hooks and components for integrating Emblem Auth and Hustle Incognito SDK into your React/Next.js application.
 
+## Documentation
+
+- **[Design System & Theming](./docs/DESIGN_SYSTEM.md)** - CSS variables, tokens, and customization guide
+
 ## Installation
 
 ```bash
@@ -115,7 +119,6 @@ function ChatComponent() {
     isLoading,         // Request in progress
     error,             // Error object
     models,            // Available AI models
-    tools,             // Available tool categories
 
     // Chat
     chat,              // Send message (non-streaming)
@@ -125,10 +128,10 @@ function ChatComponent() {
     // Settings
     selectedModel,     // Current model
     setSelectedModel,
-    selectedTools,     // Enabled tools
-    setSelectedTools,
     systemPrompt,      // Custom system prompt
     setSystemPrompt,
+    skipServerPrompt,  // Skip server's default prompt
+    setSkipServerPrompt,
   } = useHustle();
 
   // Non-streaming chat
@@ -151,29 +154,31 @@ function ChatComponent() {
 
 ### ConnectButton
 
-Authentication trigger button.
+Authentication trigger button with vault info dropdown.
 
 ```tsx
 <ConnectButton
   connectLabel="Sign In"
-  connectedLabel={(addr) => `Wallet: ${addr}`}
   loadingLabel="Connecting..."
   onConnect={() => console.log('Connected!')}
   onDisconnect={() => console.log('Disconnected!')}
-  showDisconnect={true}
-  variant="default" // or "minimal"
+  showVaultInfo={true}   // Show vault dropdown on hover when connected
 />
 ```
 
+When connected, displays:
+- Green pill: "✓ Connected • 0x1234...5678 ▾"
+- Separate power button for disconnect
+- Vault info dropdown on hover (Vault ID + wallet address with copy buttons)
+
 ### AuthStatus
 
-Display connection status and vault info.
+Simple connection status indicator.
 
 ```tsx
 <AuthStatus
-  showVaultInfo={true}   // Expandable vault details
+  showVaultInfo={true}   // Expandable vault details on hover
   showLogout={true}      // Show disconnect button
-  compact={false}        // Compact mode
 />
 ```
 
@@ -184,16 +189,20 @@ Complete streaming chat interface.
 ```tsx
 <HustleChat
   placeholder="Type a message..."
-  showModelSelector={true}
-  showToolSelector={true}
-  showSettings={true}
-  showDebug={false}
+  showSettings={true}    // Settings modal (model selector, prompts)
+  showDebug={false}      // Show tool call debug info
   initialSystemPrompt="You are a helpful assistant."
   onMessage={(msg) => console.log('Sent:', msg)}
   onToolCall={(tool) => console.log('Tool:', tool)}
   onResponse={(content) => console.log('Response:', content)}
 />
 ```
+
+The settings modal includes:
+- Model selector (grouped by provider)
+- Model info (context length, pricing)
+- Server system prompt toggle
+- Custom system prompt textarea
 
 ## Architecture
 

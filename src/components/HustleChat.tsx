@@ -3,7 +3,569 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useHustle } from '../providers/HustleProvider';
 import { useEmblemAuth } from '../providers/EmblemAuthProvider';
+import { usePlugins } from '../hooks/usePlugins';
+import { availablePlugins } from '../plugins';
+import { tokens, presets, animations } from '../styles';
 import type { ChatMessage, StreamChunk, ToolCall, Attachment } from '../types';
+
+// ============================================================================
+// Styles using design tokens
+// ============================================================================
+const styles = {
+  // Container
+  container: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    height: '100%',
+    background: tokens.colors.bgSecondary,
+    borderRadius: tokens.radius.xl,
+    border: `1px solid ${tokens.colors.borderPrimary}`,
+    fontFamily: tokens.typography.fontFamily,
+    color: tokens.colors.textPrimary,
+  },
+
+  // Not ready / auth required states
+  placeholder: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: tokens.spacing.xxl,
+    background: tokens.colors.bgSecondary,
+    borderRadius: tokens.radius.xl,
+    border: `1px solid ${tokens.colors.borderPrimary}`,
+  },
+  placeholderContent: {
+    textAlign: 'center' as const,
+    color: tokens.colors.textSecondary,
+  },
+  placeholderTitle: {
+    fontSize: tokens.typography.fontSizeLg,
+    fontWeight: tokens.typography.fontWeightMedium,
+    marginBottom: tokens.spacing.xs,
+  },
+  placeholderText: {
+    fontSize: tokens.typography.fontSizeSm,
+    color: tokens.colors.textTertiary,
+  },
+  loadingSpinner: {
+    display: 'inline-block',
+    width: '24px',
+    height: '24px',
+    border: `2px solid ${tokens.colors.textTertiary}`,
+    borderTopColor: 'transparent',
+    borderRadius: tokens.radius.full,
+    animation: 'hustle-spin 0.8s linear infinite',
+    marginBottom: tokens.spacing.sm,
+  },
+
+  // Header - darker shade
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: `${tokens.spacing.md} ${tokens.spacing.lg}`,
+    background: tokens.colors.bgPrimary,
+    borderBottom: `1px solid ${tokens.colors.borderPrimary}`,
+    borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+  },
+  headerTitle: {
+    fontWeight: tokens.typography.fontWeightSemibold,
+    color: tokens.colors.textPrimary,
+    fontSize: tokens.typography.fontSizeMd,
+  },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+  },
+
+  // Model selector
+  select: {
+    fontSize: tokens.typography.fontSizeSm,
+    padding: `${tokens.spacing.xs} ${tokens.spacing.sm}`,
+    border: `1px solid ${tokens.colors.borderSecondary}`,
+    borderRadius: tokens.radius.md,
+    background: tokens.colors.bgTertiary,
+    color: tokens.colors.textPrimary,
+    outline: 'none',
+  },
+
+  // Settings button
+  settingsBtn: {
+    ...presets.buttonIcon,
+    borderRadius: tokens.radius.md,
+  } as React.CSSProperties,
+  settingsBtnActive: {
+    background: tokens.colors.accentPrimaryBg,
+    color: tokens.colors.accentPrimary,
+  },
+  settingsBtnInactive: {
+    color: tokens.colors.textSecondary,
+  },
+
+  // Settings Modal
+  modalOverlay: {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: tokens.colors.bgOverlay,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: tokens.zIndex.modal,
+  },
+  modal: {
+    background: tokens.colors.bgSecondary,
+    borderRadius: tokens.radius.xl,
+    border: `1px solid ${tokens.colors.borderPrimary}`,
+    width: '100%',
+    maxWidth: '440px',
+    maxHeight: '90vh',
+    overflow: 'auto',
+    boxShadow: tokens.shadows.xl,
+  },
+  modalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: `${tokens.spacing.lg} ${tokens.spacing.xl}`,
+    borderBottom: `1px solid ${tokens.colors.borderPrimary}`,
+  },
+  modalTitle: {
+    fontSize: tokens.typography.fontSizeLg,
+    fontWeight: tokens.typography.fontWeightSemibold,
+    color: tokens.colors.textPrimary,
+  },
+  modalClose: {
+    background: 'transparent',
+    border: 'none',
+    color: tokens.colors.textTertiary,
+    fontSize: '20px',
+    cursor: 'pointer',
+    padding: tokens.spacing.xs,
+    lineHeight: 1,
+    transition: `color ${tokens.transitions.fast}`,
+  },
+  modalBody: {
+    padding: tokens.spacing.xl,
+  },
+
+  // Settings sections
+  settingGroup: {
+    marginBottom: tokens.spacing.xl,
+  },
+  settingLabel: {
+    display: 'block',
+    fontSize: tokens.typography.fontSizeMd,
+    fontWeight: tokens.typography.fontWeightMedium,
+    color: tokens.colors.textPrimary,
+    marginBottom: tokens.spacing.xs,
+  },
+  settingDescription: {
+    fontSize: tokens.typography.fontSizeSm,
+    color: tokens.colors.textTertiary,
+    marginBottom: tokens.spacing.md,
+  },
+  settingSelect: {
+    width: '100%',
+    padding: `${tokens.spacing.md} ${tokens.spacing.lg}`,
+    fontSize: tokens.typography.fontSizeMd,
+    background: tokens.colors.bgTertiary,
+    border: `1px solid ${tokens.colors.borderSecondary}`,
+    borderRadius: tokens.radius.lg,
+    color: tokens.colors.textPrimary,
+    outline: 'none',
+    cursor: 'pointer',
+    appearance: 'none' as const,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238892a4' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 12px center',
+    paddingRight: '36px',
+  },
+  modelInfo: {
+    fontSize: tokens.typography.fontSizeXs,
+    color: tokens.colors.textTertiary,
+    marginTop: tokens.spacing.sm,
+  },
+
+  // Toggle switch row
+  toggleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: `${tokens.spacing.md} ${tokens.spacing.lg}`,
+    background: tokens.colors.bgTertiary,
+    borderRadius: tokens.radius.lg,
+    marginBottom: tokens.spacing.sm,
+  },
+  toggleLabel: {
+    fontSize: tokens.typography.fontSizeMd,
+    color: tokens.colors.textPrimary,
+  },
+  toggleSwitch: {
+    position: 'relative' as const,
+    width: '44px',
+    height: '24px',
+    background: tokens.colors.borderSecondary,
+    borderRadius: '12px',
+    cursor: 'pointer',
+    transition: `background ${tokens.transitions.fast}`,
+  },
+  toggleSwitchActive: {
+    background: tokens.colors.accentPrimary,
+  },
+  toggleKnob: {
+    position: 'absolute' as const,
+    top: '2px',
+    left: '2px',
+    width: '20px',
+    height: '20px',
+    background: tokens.colors.textPrimary,
+    borderRadius: tokens.radius.full,
+    transition: `transform ${tokens.transitions.fast}`,
+  },
+  toggleKnobActive: {
+    transform: 'translateX(20px)',
+  },
+
+  // Settings textarea
+  settingTextarea: {
+    width: '100%',
+    minHeight: '100px',
+    padding: tokens.spacing.lg,
+    fontSize: tokens.typography.fontSizeMd,
+    background: tokens.colors.bgTertiary,
+    border: `1px solid ${tokens.colors.borderSecondary}`,
+    borderRadius: tokens.radius.lg,
+    color: tokens.colors.textPrimary,
+    outline: 'none',
+    resize: 'vertical' as const,
+    fontFamily: tokens.typography.fontFamily,
+  },
+
+  // Messages area
+  messagesArea: {
+    flex: 1,
+    overflowY: 'auto' as const,
+    padding: tokens.spacing.lg,
+    background: tokens.colors.bgSecondary,
+  },
+  messagesEmpty: {
+    textAlign: 'center' as const,
+    color: tokens.colors.textTertiary,
+    padding: tokens.spacing.xxl,
+  },
+  messagesContainer: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: tokens.spacing.lg,
+  },
+
+  // Tool calls indicator
+  toolCallsIndicator: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: tokens.spacing.sm,
+    padding: `0 ${tokens.spacing.lg}`,
+  },
+  toolCallBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    padding: `${tokens.spacing.xs} ${tokens.spacing.sm}`,
+    fontSize: tokens.typography.fontSizeXs,
+    background: tokens.colors.accentWarningBg,
+    color: tokens.colors.accentWarning,
+    borderRadius: tokens.radius.pill,
+  },
+  toolCallDot: {
+    width: '8px',
+    height: '8px',
+    background: tokens.colors.accentWarning,
+    borderRadius: tokens.radius.full,
+    animation: 'hustle-pulse 1s ease-in-out infinite',
+  },
+
+  // Attachments preview
+  attachmentsPreview: {
+    padding: `${tokens.spacing.sm} ${tokens.spacing.lg}`,
+    borderTop: `1px solid ${tokens.colors.borderPrimary}`,
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: tokens.spacing.sm,
+  },
+  attachmentItem: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacing.xs,
+    padding: `${tokens.spacing.xs} ${tokens.spacing.sm}`,
+    background: tokens.colors.bgTertiary,
+    borderRadius: tokens.radius.md,
+    fontSize: tokens.typography.fontSizeSm,
+  },
+  attachmentName: {
+    maxWidth: '100px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  attachmentRemove: {
+    background: 'none',
+    border: 'none',
+    color: tokens.colors.textTertiary,
+    cursor: 'pointer',
+    fontSize: '14px',
+    padding: 0,
+    lineHeight: 1,
+  },
+
+  // Input area - slightly darker than messages
+  inputArea: {
+    padding: tokens.spacing.lg,
+    background: tokens.colors.bgPrimary,
+    borderTop: `1px solid ${tokens.colors.borderPrimary}`,
+    borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
+  },
+  inputRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacing.sm,
+  },
+  inputContainer: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    background: tokens.colors.bgTertiary,
+    border: `1px solid ${tokens.colors.borderSecondary}`,
+    borderRadius: tokens.radius.lg,
+    overflow: 'hidden',
+  },
+  attachBtn: {
+    width: '40px',
+    height: '40px',
+    padding: 0,
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 0,
+    color: tokens.colors.textTertiary,
+    flexShrink: 0,
+  } as React.CSSProperties,
+  inputWrapper: {
+    flex: 1,
+  },
+  input: {
+    width: '100%',
+    padding: `${tokens.spacing.md} ${tokens.spacing.sm}`,
+    background: 'transparent',
+    border: 'none',
+    color: tokens.colors.textPrimary,
+    fontSize: tokens.typography.fontSizeMd,
+    outline: 'none',
+    resize: 'none' as const,
+  } as React.CSSProperties,
+  inputDisabled: {
+    background: tokens.colors.bgTertiary,
+    cursor: 'not-allowed',
+  },
+  sendBtn: {
+    // Inherits global button styles from CSS
+    height: '40px',
+    padding: `0 ${tokens.spacing.lg}`,
+    fontWeight: tokens.typography.fontWeightMedium,
+  } as React.CSSProperties,
+  sendBtnDisabled: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
+  },
+  sendSpinner: {
+    display: 'inline-block',
+    width: '16px',
+    height: '16px',
+    border: '2px solid currentColor',
+    borderTopColor: 'transparent',
+    borderRadius: tokens.radius.full,
+    animation: 'hustle-spin 0.8s linear infinite',
+  },
+
+  // Error display
+  errorBox: {
+    marginTop: tokens.spacing.sm,
+    padding: `${tokens.spacing.sm} ${tokens.spacing.md}`,
+    background: tokens.colors.accentErrorBg,
+    color: tokens.colors.accentError,
+    fontSize: tokens.typography.fontSizeSm,
+    borderRadius: tokens.radius.md,
+  },
+
+  // Message bubbles
+  messageBubbleContainer: {
+    display: 'flex',
+  },
+  messageBubbleUser: {
+    justifyContent: 'flex-end',
+  },
+  messageBubbleAssistant: {
+    justifyContent: 'flex-start',
+  },
+  messageBubble: {
+    maxWidth: '80%',
+    padding: `${tokens.spacing.sm} ${tokens.spacing.lg}`,
+    borderRadius: tokens.radius.lg,
+  },
+  messageBubbleUserStyle: {
+    background: tokens.colors.msgUser,
+    color: tokens.colors.textPrimary,
+  },
+  messageBubbleAssistantStyle: {
+    background: tokens.colors.msgAssistant,
+    color: tokens.colors.textPrimary,
+  },
+  messageBubbleSystemStyle: {
+    background: tokens.colors.bgTertiary,
+    color: tokens.colors.textSecondary,
+    fontSize: tokens.typography.fontSizeSm,
+    fontStyle: 'italic' as const,
+  },
+  messageContent: {
+    whiteSpace: 'pre-wrap' as const,
+    wordBreak: 'break-word' as const,
+    lineHeight: tokens.typography.lineHeightRelaxed,
+  },
+  streamingCursor: {
+    display: 'inline-block',
+    width: '2px',
+    height: '16px',
+    marginLeft: tokens.spacing.xs,
+    background: 'currentColor',
+    animation: 'hustle-pulse 0.8s ease-in-out infinite',
+  },
+
+  // Tool calls debug
+  toolCallsDebug: {
+    marginTop: tokens.spacing.sm,
+    paddingTop: tokens.spacing.sm,
+    borderTop: `1px solid ${tokens.colors.borderSecondary}`,
+    fontSize: tokens.typography.fontSizeXs,
+  },
+  toolCallsDebugTitle: {
+    fontWeight: tokens.typography.fontWeightMedium,
+    color: tokens.colors.textSecondary,
+    marginBottom: tokens.spacing.xs,
+  },
+  toolCallDebugItem: {
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: tokens.radius.sm,
+    padding: tokens.spacing.xs,
+    marginTop: tokens.spacing.xs,
+  },
+  toolCallDebugName: {
+    ...presets.mono,
+  } as React.CSSProperties,
+  toolCallDebugArgs: {
+    ...presets.mono,
+    marginTop: tokens.spacing.xs,
+    fontSize: '10px',
+    overflow: 'auto',
+  } as React.CSSProperties,
+
+  // Plugin management styles
+  settingDivider: {
+    height: '1px',
+    background: tokens.colors.borderPrimary,
+    margin: `${tokens.spacing.xl} 0`,
+  },
+
+  pluginList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: tokens.spacing.sm,
+  },
+
+  pluginRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: `${tokens.spacing.md} ${tokens.spacing.lg}`,
+    background: tokens.colors.bgTertiary,
+    borderRadius: tokens.radius.lg,
+  },
+
+  pluginInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacing.md,
+    flex: 1,
+    minWidth: 0,
+  },
+
+  pluginIcon: {
+    fontSize: '20px',
+    flexShrink: 0,
+  },
+
+  pluginDetails: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  pluginName: {
+    display: 'block',
+    fontWeight: tokens.typography.fontWeightMedium,
+    color: tokens.colors.textPrimary,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+
+  pluginMeta: {
+    display: 'block',
+    fontSize: tokens.typography.fontSizeXs,
+    color: tokens.colors.textTertiary,
+  },
+
+  pluginEmpty: {
+    padding: tokens.spacing.lg,
+    textAlign: 'center' as const,
+    color: tokens.colors.textTertiary,
+    fontSize: tokens.typography.fontSizeSm,
+  },
+
+  availablePluginsHeader: {
+    fontSize: tokens.typography.fontSizeXs,
+    fontWeight: tokens.typography.fontWeightSemibold,
+    color: tokens.colors.textSecondary,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+    marginTop: tokens.spacing.lg,
+    marginBottom: tokens.spacing.sm,
+  },
+
+  installBtn: {
+    padding: `${tokens.spacing.xs} ${tokens.spacing.md}`,
+    fontSize: tokens.typography.fontSizeSm,
+    background: 'transparent',
+    border: `1px solid ${tokens.colors.accentPrimary}`,
+    borderRadius: tokens.radius.md,
+    color: tokens.colors.accentPrimary,
+    cursor: 'pointer',
+    transition: `all ${tokens.transitions.fast}`,
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
+
+  uninstallBtn: {
+    padding: `${tokens.spacing.xs} ${tokens.spacing.md}`,
+    fontSize: tokens.typography.fontSizeSm,
+    background: 'transparent',
+    border: `1px solid ${tokens.colors.accentError}`,
+    borderRadius: tokens.radius.md,
+    color: tokens.colors.accentError,
+    cursor: 'pointer',
+    transition: `all ${tokens.transitions.fast}`,
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
+};
 
 /**
  * Props for HustleChat component
@@ -13,11 +575,7 @@ export interface HustleChatProps {
   className?: string;
   /** Placeholder text for input */
   placeholder?: string;
-  /** Show model selector */
-  showModelSelector?: boolean;
-  /** Show tool selector */
-  showToolSelector?: boolean;
-  /** Show settings panel */
+  /** Show settings button (opens modal with model selector, prompts, etc.) */
   showSettings?: boolean;
   /** Show debug info */
   showDebug?: boolean;
@@ -55,11 +613,9 @@ function generateId(): string {
  * <HustleChat />
  * ```
  *
- * @example With options
+ * @example With settings modal
  * ```tsx
  * <HustleChat
- *   showModelSelector
- *   showToolSelector
  *   showSettings
  *   placeholder="Ask me anything..."
  *   onMessage={(msg) => console.log('Sent:', msg)}
@@ -69,8 +625,6 @@ function generateId(): string {
 export function HustleChat({
   className = '',
   placeholder = 'Type a message...',
-  showModelSelector = false,
-  showToolSelector = false,
   showSettings = false,
   showDebug = false,
   initialSystemPrompt = '',
@@ -84,18 +638,22 @@ export function HustleChat({
     isLoading,
     error,
     models,
-    tools,
     chatStream,
     uploadFile,
     selectedModel,
     setSelectedModel,
-    selectedTools,
-    setSelectedTools,
     systemPrompt,
     setSystemPrompt,
     skipServerPrompt,
     setSkipServerPrompt,
   } = useHustle();
+  const {
+    plugins,
+    registerPlugin,
+    unregisterPlugin,
+    enablePlugin,
+    disablePlugin,
+  } = usePlugins();
 
   // Local state
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -272,247 +830,354 @@ export function HustleChat({
     [sendMessage]
   );
 
-  /**
-   * Toggle tool selection
-   */
-  const toggleTool = useCallback(
-    (toolId: string) => {
-      setSelectedTools(
-        selectedTools.includes(toolId)
-          ? selectedTools.filter(t => t !== toolId)
-          : [...selectedTools, toolId]
-      );
-    },
-    [selectedTools, setSelectedTools]
-  );
+  // Determine placeholder message for messages area
+  const getPlaceholderMessage = () => {
+    if (!isAuthenticated) {
+      return 'Connect to start chatting...';
+    }
+    if (!isReady) {
+      return 'Initializing...';
+    }
+    return 'Start a conversation...';
+  };
 
-  // Not authenticated state
-  if (!isAuthenticated) {
-    return (
-      <div className={`flex items-center justify-center p-8 bg-gray-100 rounded-lg ${className}`}>
-        <div className="text-center text-gray-500">
-          <p className="text-lg font-medium">Authentication Required</p>
-          <p className="text-sm mt-1">Please connect to start chatting</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Not ready state
-  if (!isReady) {
-    return (
-      <div className={`flex items-center justify-center p-8 bg-gray-100 rounded-lg ${className}`}>
-        <div className="text-center text-gray-500">
-          <div className="inline-block w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mb-2" />
-          <p className="text-sm">Initializing chat...</p>
-        </div>
-      </div>
-    );
-  }
+  // Can interact with chat?
+  const canChat = isAuthenticated && isReady;
 
   return (
-    <div className={`flex flex-col h-full bg-white rounded-lg shadow ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <h2 className="font-semibold text-gray-900">Chat</h2>
-        <div className="flex items-center gap-2">
-          {/* Model selector */}
-          {showModelSelector && models.length > 0 && (
-            <select
-              value={selectedModel}
-              onChange={e => setSelectedModel(e.target.value)}
-              className="text-sm px-2 py-1 border border-gray-300 rounded bg-white"
-            >
-              <option value="">Default model</option>
-              {models.map(model => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
-          )}
+    <>
+      <style>{animations}</style>
+      <div className={className} style={styles.container}>
+        {/* Header */}
+        <div style={styles.header}>
+          <h2 style={styles.headerTitle}>Chat</h2>
+          <div style={styles.headerActions}>
+            {/* Selected model label */}
+            {selectedModel && (
+              <span style={{ fontSize: tokens.typography.fontSizeSm, color: tokens.colors.textSecondary }}>
+                {selectedModel.split('/').pop()}
+              </span>
+            )}
 
-          {/* Settings toggle */}
-          {showSettings && (
-            <button
-              type="button"
-              onClick={() => setShowSettingsPanel(!showSettingsPanel)}
-              className={`p-2 rounded ${showSettingsPanel ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
-              title="Settings"
-            >
-              <SettingsIcon />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Settings panel */}
-      {showSettings && showSettingsPanel && (
-        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 space-y-3">
-          {/* System prompt */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              System Prompt
-            </label>
-            <textarea
-              value={systemPrompt}
-              onChange={e => setSystemPrompt(e.target.value)}
-              placeholder="You are a helpful assistant..."
-              rows={2}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded resize-none"
-            />
+            {/* Settings toggle */}
+            {showSettings && (
+              <button
+                type="button"
+                onClick={() => setShowSettingsPanel(!showSettingsPanel)}
+                style={{
+                  ...styles.settingsBtn,
+                  ...(showSettingsPanel ? styles.settingsBtnActive : styles.settingsBtnInactive),
+                }}
+                title="Settings"
+              >
+                <SettingsIcon />
+              </button>
+            )}
           </div>
+        </div>
 
-          {/* Skip server prompt */}
-          <label className="flex items-center gap-2 text-sm text-gray-600">
-            <input
-              type="checkbox"
-              checked={skipServerPrompt}
-              onChange={e => setSkipServerPrompt(e.target.checked)}
-              className="rounded"
-            />
-            Skip server system prompt
-          </label>
+        {/* Settings Modal */}
+        {showSettings && showSettingsPanel && (
+          <div style={styles.modalOverlay} onClick={() => setShowSettingsPanel(false)}>
+            <div style={styles.modal} onClick={e => e.stopPropagation()}>
+              {/* Modal Header */}
+              <div style={styles.modalHeader}>
+                <span style={styles.modalTitle}>Settings</span>
+                <button
+                  type="button"
+                  style={styles.modalClose}
+                  onClick={() => setShowSettingsPanel(false)}
+                >
+                  ×
+                </button>
+              </div>
 
-          {/* Tool selector */}
-          {showToolSelector && tools.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Tools
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {tools.map(tool => (
-                  <button
-                    key={tool.id}
-                    type="button"
-                    onClick={() => toggleTool(tool.id)}
-                    className={`px-2 py-1 text-xs rounded ${
-                      selectedTools.includes(tool.id)
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+              {/* Modal Body */}
+              <div style={styles.modalBody}>
+                {/* Model Selection */}
+                <div style={styles.settingGroup}>
+                  <label style={styles.settingLabel}>Model</label>
+                  <p style={styles.settingDescription}>Select the AI model to use for chat responses</p>
+                  <select
+                    value={selectedModel}
+                    onChange={e => setSelectedModel(e.target.value)}
+                    style={styles.settingSelect}
                   >
-                    {tool.title || tool.id}
-                  </button>
-                ))}
+                    <option value="">Default (server decides)</option>
+                    {(() => {
+                      // Group models by provider
+                      const grouped: Record<string, typeof models> = {};
+                      models.forEach(model => {
+                        const [provider] = model.id.split('/');
+                        if (!grouped[provider]) grouped[provider] = [];
+                        grouped[provider].push(model);
+                      });
+                      return Object.entries(grouped).map(([provider, providerModels]) => (
+                        <optgroup key={provider} label={provider.charAt(0).toUpperCase() + provider.slice(1)}>
+                          {providerModels.map(model => (
+                            <option key={model.id} value={model.id}>
+                              {model.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ));
+                    })()}
+                  </select>
+                  {selectedModel && (() => {
+                    const model = models.find(m => m.id === selectedModel);
+                    if (!model) return null;
+                    const contextK = Math.round(model.context_length / 1000);
+                    const promptCost = parseFloat(model.pricing?.prompt || '0') * 1000000;
+                    const completionCost = parseFloat(model.pricing?.completion || '0') * 1000000;
+                    return (
+                      <div style={styles.modelInfo}>
+                        Context: {contextK}K tokens | Cost: ${promptCost.toFixed(2)}/${completionCost.toFixed(2)} per 1M tokens
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Server System Prompt */}
+                <div style={styles.settingGroup}>
+                  <label style={styles.settingLabel}>Server System Prompt</label>
+                  <div
+                    style={styles.toggleRow}
+                    onClick={() => setSkipServerPrompt(!skipServerPrompt)}
+                  >
+                    <span style={styles.toggleLabel}>Skip server-provided system prompt</span>
+                    <div style={{
+                      ...styles.toggleSwitch,
+                      ...(skipServerPrompt ? styles.toggleSwitchActive : {}),
+                    }}>
+                      <div style={{
+                        ...styles.toggleKnob,
+                        ...(skipServerPrompt ? styles.toggleKnobActive : {}),
+                      }} />
+                    </div>
+                  </div>
+                  <p style={styles.settingDescription}>
+                    When enabled, the server's default system prompt will not be used
+                  </p>
+                </div>
+
+                {/* Custom System Prompt */}
+                <div style={styles.settingGroup}>
+                  <label style={styles.settingLabel}>Custom System Prompt</label>
+                  <p style={styles.settingDescription}>Provide instructions for how the AI should behave</p>
+                  <textarea
+                    value={systemPrompt}
+                    onChange={e => setSystemPrompt(e.target.value)}
+                    placeholder="You are a helpful assistant..."
+                    style={styles.settingTextarea}
+                  />
+                </div>
+
+                {/* Divider */}
+                <div style={styles.settingDivider} />
+
+                {/* Plugins Section */}
+                <div style={{ ...styles.settingGroup, marginBottom: 0 }}>
+                  <label style={styles.settingLabel}>Plugins</label>
+                  <p style={styles.settingDescription}>Extend the AI with custom tools</p>
+
+                  {/* Installed plugins */}
+                  {plugins.length > 0 ? (
+                    <div style={styles.pluginList}>
+                      {plugins.map(plugin => (
+                        <div key={plugin.name} style={styles.pluginRow}>
+                          <div style={styles.pluginInfo}>
+                            <span style={styles.pluginIcon}>{plugin.enabled ? '🔌' : '⚪'}</span>
+                            <div style={styles.pluginDetails}>
+                              <span style={styles.pluginName}>{plugin.name}</span>
+                              <span style={styles.pluginMeta}>
+                                v{plugin.version} • {plugin.tools?.length || 0} tools
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: tokens.spacing.sm }}>
+                            <div
+                              style={{
+                                ...styles.toggleSwitch,
+                                ...(plugin.enabled ? styles.toggleSwitchActive : {}),
+                              }}
+                              onClick={() => plugin.enabled
+                                ? disablePlugin(plugin.name)
+                                : enablePlugin(plugin.name)
+                              }
+                            >
+                              <div style={{
+                                ...styles.toggleKnob,
+                                ...(plugin.enabled ? styles.toggleKnobActive : {}),
+                              }} />
+                            </div>
+                            <button
+                              type="button"
+                              style={styles.uninstallBtn}
+                              onClick={() => unregisterPlugin(plugin.name)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={styles.pluginEmpty}>
+                      No plugins installed
+                    </div>
+                  )}
+
+                  {/* Available plugins */}
+                  {availablePlugins.filter(p => !plugins.some(installed => installed.name === p.name)).length > 0 && (
+                    <>
+                      <div style={styles.availablePluginsHeader}>Available</div>
+                      <div style={styles.pluginList}>
+                        {availablePlugins
+                          .filter(p => !plugins.some(installed => installed.name === p.name))
+                          .map(plugin => (
+                            <div key={plugin.name} style={styles.pluginRow}>
+                              <div style={styles.pluginInfo}>
+                                <span style={styles.pluginIcon}>📦</span>
+                                <div style={styles.pluginDetails}>
+                                  <span style={styles.pluginName}>{plugin.name}</span>
+                                  <span style={styles.pluginMeta}>{plugin.description}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                style={styles.installBtn}
+                                onClick={() => registerPlugin(plugin)}
+                              >
+                                + Install
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-center text-gray-400 py-8">
-            <p>Start a conversation...</p>
           </div>
         )}
 
-        {messages.map(message => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            showDebug={showDebug}
-          />
-        ))}
+        {/* Messages area */}
+        <div style={styles.messagesArea}>
+          {messages.length === 0 && (
+            <div style={styles.messagesEmpty}>
+              <p>{getPlaceholderMessage()}</p>
+            </div>
+          )}
 
-        {/* Current tool calls indicator */}
-        {currentToolCalls.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-4">
-            {currentToolCalls.map(tool => (
-              <span
-                key={tool.toolCallId}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full"
-              >
-                <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                {tool.toolName}
-              </span>
+          <div style={styles.messagesContainer}>
+            {messages.map(message => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                showDebug={showDebug}
+              />
+            ))}
+          </div>
+
+          {/* Current tool calls indicator */}
+          {currentToolCalls.length > 0 && (
+            <div style={styles.toolCallsIndicator}>
+              {currentToolCalls.map(tool => (
+                <span key={tool.toolCallId} style={styles.toolCallBadge}>
+                  <span style={styles.toolCallDot} />
+                  {tool.toolName}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Attachments preview */}
+        {attachments.length > 0 && (
+          <div style={styles.attachmentsPreview}>
+            {attachments.map((att, index) => (
+              <div key={index} style={styles.attachmentItem}>
+                <span style={styles.attachmentName}>{att.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(index)}
+                  style={styles.attachmentRemove}
+                >
+                  ×
+                </button>
+              </div>
             ))}
           </div>
         )}
 
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Attachments preview */}
-      {attachments.length > 0 && (
-        <div className="px-4 py-2 border-t border-gray-200 flex flex-wrap gap-2">
-          {attachments.map((att, index) => (
-            <div
-              key={index}
-              className="relative inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-sm"
-            >
-              <span className="truncate max-w-[100px]">{att.name}</span>
+        {/* Input area */}
+        <div style={styles.inputArea}>
+          <div style={styles.inputRow}>
+            {/* Input container with attached file button */}
+            <div style={styles.inputContainer}>
               <button
                 type="button"
-                onClick={() => removeAttachment(index)}
-                className="text-gray-400 hover:text-red-500"
+                onClick={() => fileInputRef.current?.click()}
+                style={styles.attachBtn}
+                title="Attach file"
               >
-                ×
+                <AttachIcon />
               </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+              />
+              <div style={styles.inputWrapper}>
+                <textarea
+                  value={inputValue}
+                  onChange={e => setInputValue(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder={placeholder}
+                  disabled={!canChat || isStreaming || isLoading}
+                  rows={1}
+                  style={{
+                    ...styles.input,
+                    ...(!canChat || isStreaming || isLoading ? styles.inputDisabled : {}),
+                  }}
+                />
+              </div>
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* Input area */}
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex items-end gap-2">
-          {/* File upload button */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-400 hover:text-gray-600"
-            title="Attach file"
-          >
-            <AttachIcon />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-
-          {/* Text input */}
-          <div className="flex-1">
-            <textarea
-              value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={placeholder}
-              disabled={isStreaming || isLoading}
-              rows={1}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-            />
+            {/* Send button */}
+            <button
+              type="button"
+              onClick={sendMessage}
+              disabled={!canChat || !inputValue.trim() || isStreaming || isLoading}
+              style={{
+                ...styles.sendBtn,
+                ...(!canChat || !inputValue.trim() || isStreaming || isLoading
+                  ? styles.sendBtnDisabled
+                  : {}),
+              }}
+            >
+              {isStreaming ? (
+                <span style={styles.sendSpinner} />
+              ) : (
+                'Send'
+              )}
+            </button>
           </div>
 
-          {/* Send button */}
-          <button
-            type="button"
-            onClick={sendMessage}
-            disabled={!inputValue.trim() || isStreaming || isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-          >
-            {isStreaming ? (
-              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              'Send'
-            )}
-          </button>
+          {/* Error display */}
+          {error && (
+            <div style={styles.errorBox}>
+              {error.message}
+            </div>
+          )}
         </div>
-
-        {/* Error display */}
-        {error && (
-          <div className="mt-2 px-3 py-2 bg-red-50 text-red-600 text-sm rounded">
-            {error.message}
-          </div>
-        )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -528,36 +1193,40 @@ function MessageBubble({ message, showDebug }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
 
+  const containerStyle = {
+    ...styles.messageBubbleContainer,
+    ...(isUser ? styles.messageBubbleUser : styles.messageBubbleAssistant),
+  };
+
+  const bubbleStyle = {
+    ...styles.messageBubble,
+    ...(isUser
+      ? styles.messageBubbleUserStyle
+      : isSystem
+        ? styles.messageBubbleSystemStyle
+        : styles.messageBubbleAssistantStyle),
+  };
+
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`
-          max-w-[80%] px-4 py-2 rounded-lg
-          ${isUser
-            ? 'bg-blue-600 text-white'
-            : isSystem
-              ? 'bg-gray-200 text-gray-700 text-sm italic'
-              : 'bg-gray-100 text-gray-900'
-          }
-        `}
-      >
+    <div style={containerStyle}>
+      <div style={bubbleStyle}>
         {/* Message content */}
-        <div className="whitespace-pre-wrap break-words">
+        <div style={styles.messageContent}>
           {message.content}
           {message.isStreaming && (
-            <span className="inline-block w-2 h-4 ml-1 bg-current animate-pulse" />
+            <span style={styles.streamingCursor} />
           )}
         </div>
 
         {/* Tool calls (debug mode) */}
         {showDebug && message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-gray-300 text-xs">
-            <div className="font-medium text-gray-600 mb-1">Tool calls:</div>
+          <div style={styles.toolCallsDebug}>
+            <div style={styles.toolCallsDebugTitle}>Tool calls:</div>
             {message.toolCalls.map(tool => (
-              <div key={tool.toolCallId} className="bg-white/50 rounded p-1 mt-1">
-                <span className="font-mono">{tool.toolName}</span>
+              <div key={tool.toolCallId} style={styles.toolCallDebugItem}>
+                <span style={styles.toolCallDebugName}>{tool.toolName}</span>
                 {tool.args && (
-                  <pre className="mt-1 text-[10px] overflow-auto">
+                  <pre style={styles.toolCallDebugArgs}>
                     {JSON.stringify(tool.args, null, 2)}
                   </pre>
                 )}

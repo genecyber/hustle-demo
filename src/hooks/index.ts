@@ -4,6 +4,7 @@
 
 export { useEmblemAuth, EmblemAuthProvider, resetAuthSDK } from './useEmblemAuth';
 export { useHustle, HustleProvider } from './useHustle';
+export { usePlugins } from './usePlugins';
 
 // Re-export types for convenience
 export type {
@@ -18,7 +19,6 @@ export type {
   ToolResult,
   Attachment,
   Model,
-  ToolCategory,
   ChatOptions,
   StreamOptions,
   StreamChunk,
@@ -29,4 +29,12 @@ export type {
   HustleConfig,
   HustleContextValue,
   HustleProviderProps,
+  // Plugin types
+  HustlePlugin,
+  StoredPlugin,
+  HydratedPlugin,
+  ClientToolDefinition,
+  ToolExecutor,
 } from '../types';
+
+export type { UsePluginsReturn } from './usePlugins';
