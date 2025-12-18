@@ -192,4 +192,23 @@ export interface HustleContextValue {
  */
 export interface HustleProviderProps extends HustleConfig {
   children: React.ReactNode;
+  /**
+   * Unique identifier for this provider instance.
+   * Used to scope settings persistence (localStorage) when multiple
+   * HustleProviders exist in the same app.
+   *
+   * If not provided, an auto-generated ID based on mount order is used.
+   * For stable persistence with multiple providers, explicit IDs are recommended.
+   *
+   * @example
+   * ```tsx
+   * <HustleProvider instanceId="trading-assistant">
+   *   <TradingChat />
+   * </HustleProvider>
+   * <HustleProvider instanceId="support-bot">
+   *   <SupportChat />
+   * </HustleProvider>
+   * ```
+   */
+  instanceId?: string;
 }

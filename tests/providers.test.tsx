@@ -300,3 +300,117 @@ describe('Architecture', () => {
     expect(screen.getByTestId('authSdk').textContent).toBe('yes');
   });
 });
+
+describe('HustleProvider instanceId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetAuthSDK();
+    mockState.lastAuthSDK = null;
+    mockState.lastHustleClient = null;
+    // Clear localStorage for clean tests
+    if (typeof localStorage !== 'undefined') {
+      localStorage.clear();
+    }
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('accepts explicit instanceId prop', () => {
+    function TestComponent() {
+      const { isReady } = useHustle();
+      return <div data-testid="ready">{String(isReady)}</div>;
+    }
+
+    // Should not throw with explicit instanceId
+    render(
+      <EmblemAuthProvider appId="test">
+        <HustleProvider instanceId="my-custom-id">
+          <TestComponent />
+        </HustleProvider>
+      </EmblemAuthProvider>
+    );
+
+    expect(screen.getByTestId('ready')).toBeDefined();
+  });
+
+  it('generates auto instanceId when not provided', () => {
+    function TestComponent() {
+      const { isReady } = useHustle();
+      return <div data-testid="ready">{String(isReady)}</div>;
+    }
+
+    // Should work without instanceId (auto-generated)
+    render(
+      <EmblemAuthProvider appId="test">
+        <HustleProvider>
+          <TestComponent />
+        </HustleProvider>
+      </EmblemAuthProvider>
+    );
+
+    expect(screen.getByTestId('ready')).toBeDefined();
+  });
+
+  it('logs warning for multiple providers without explicit instanceId', () => {
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Set NODE_ENV to development for warning
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    function TestComponent() {
+      const { isReady } = useHustle();
+      return <div data-testid="ready">{String(isReady)}</div>;
+    }
+
+    render(
+      <EmblemAuthProvider appId="test">
+        <HustleProvider>
+          <TestComponent />
+        </HustleProvider>
+        <HustleProvider>
+          <TestComponent />
+        </HustleProvider>
+      </EmblemAuthProvider>
+    );
+
+    // Should warn about multiple providers
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Multiple HustleProviders detected')
+    );
+
+    consoleSpy.mockRestore();
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('does not warn when explicit instanceIds are provided', () => {
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    function TestComponent() {
+      const { isReady } = useHustle();
+      return <div data-testid="ready">{String(isReady)}</div>;
+    }
+
+    render(
+      <EmblemAuthProvider appId="test">
+        <HustleProvider instanceId="chat-1">
+          <TestComponent />
+        </HustleProvider>
+        <HustleProvider instanceId="chat-2">
+          <TestComponent />
+        </HustleProvider>
+      </EmblemAuthProvider>
+    );
+
+    // Should NOT warn when explicit IDs provided
+    expect(consoleSpy).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+    process.env.NODE_ENV = originalEnv;
+  });
+});

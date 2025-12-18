@@ -246,6 +246,125 @@ The Hustle SDK (when initialized with `sdk:`) automatically handles:
 - Streaming response parsing
 - Tool call orchestration
 
+## Multiple Chat Instances
+
+You can use multiple `HustleProvider` instances in the same app. Each instance has isolated settings and plugins.
+
+```tsx
+<EmblemAuthProvider appId="your-app">
+  {/* Trading assistant */}
+  <HustleProvider instanceId="trading">
+    <TradingChat />
+  </HustleProvider>
+
+  {/* Support bot */}
+  <HustleProvider instanceId="support">
+    <SupportChat />
+  </HustleProvider>
+</EmblemAuthProvider>
+```
+
+**How it works:**
+- Each provider stores settings separately (`hustle-settings-{instanceId}`)
+- Plugins are installed globally (`hustle-plugins`) - install once, available everywhere
+- Plugin enabled/disabled state is per-instance (`hustle-plugin-state-{instanceId}`)
+- If `instanceId` is omitted, an auto-generated ID is used (`instance-1`, `instance-2`, etc.)
+- Dev warning appears when multiple providers exist without explicit IDs
+
+## Plugin System
+
+Extend the AI with custom client-side tools using plugins.
+
+### usePlugins Hook
+
+```tsx
+import { usePlugins } from './src';
+
+function PluginManager() {
+  const {
+    plugins,           // All registered plugins
+    enabledPlugins,    // Only enabled plugins (with executors)
+    registerPlugin,    // Add a plugin
+    unregisterPlugin,  // Remove a plugin
+    enablePlugin,      // Enable a plugin
+    disablePlugin,     // Disable a plugin
+    isRegistered,      // Check if registered
+    isEnabled,         // Check if enabled
+  } = usePlugins();
+
+  return (
+    <div>
+      {plugins.map(p => (
+        <div key={p.name}>
+          {p.name} - {p.enabled ? 'On' : 'Off'}
+          <button onClick={() => p.enabled ? disablePlugin(p.name) : enablePlugin(p.name)}>
+            Toggle
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Available Plugins
+
+Two plugins are included:
+
+**Prediction Market Alpha** (`prediction-market-alpha`)
+- Search Polymarket and Kalshi markets
+- Get market details, prices, and trades
+- Tools: `get_supported_platforms`, `search_prediction_markets`, `get_market_details`, `get_market_prices`, `get_market_trades`
+
+**Migrate.fun Knowledge Base** (`migrate-fun-kb`)
+- Embedded Q&A about token migrations
+- Tool: `search_migrate_fun_docs`
+
+### Creating Custom Plugins
+
+```tsx
+import type { HustlePlugin } from './src';
+
+const myPlugin: HustlePlugin = {
+  name: 'my-plugin',
+  version: '1.0.0',
+  description: 'My custom plugin',
+  tools: [
+    {
+      name: 'get_weather',
+      description: 'Get current weather for a city',
+      parameters: {
+        type: 'object',
+        properties: {
+          city: { type: 'string', description: 'City name' },
+        },
+        required: ['city'],
+      },
+    },
+  ],
+  executors: {
+    get_weather: async (args) => {
+      // Your implementation
+      return { temp: 72, conditions: 'sunny' };
+    },
+  },
+  hooks: {
+    onRegister: () => console.log('Plugin registered!'),
+  },
+};
+
+// Register it
+const { registerPlugin } = usePlugins();
+registerPlugin(myPlugin);
+```
+
+### Plugin Persistence
+
+- Plugins are persisted in localStorage
+- Executors (functions) are hydrated from known plugins on page refresh
+- Enable/disable state is preserved
+- Cross-tab sync via StorageEvent
+
 ## Configuration
 
 ### Environment Variables
@@ -272,6 +391,7 @@ NEXT_PUBLIC_HUSTLE_API_URL=https://dev.agenthustle.ai
 |------|------|----------|-------------|
 | `hustleApiUrl` | string | No | Hustle API endpoint |
 | `debug` | boolean | No | Enable debug logging |
+| `instanceId` | string | No | Unique ID for multi-instance scoping (auto-generated if not provided) |
 
 ## Building
 

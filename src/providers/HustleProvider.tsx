@@ -36,6 +36,17 @@ const HustleContext = createContext<HustleContextValue | undefined>(undefined);
 const DEFAULT_HUSTLE_API_URL = 'https://agenthustle.ai';
 
 /**
+ * Module-level counter for auto-generating instance IDs.
+ * Resets on page load, but render order is deterministic.
+ */
+let instanceCounter = 0;
+
+/**
+ * Track mounted instances without explicit IDs for dev warnings
+ */
+const mountedAutoInstances = new Set<string>();
+
+/**
  * HustleProvider - Provides Hustle SDK functionality to the app
  *
  * IMPORTANT: This provider depends on EmblemAuthProvider and must be nested within it.
@@ -55,12 +66,45 @@ export function HustleProvider({
   children,
   hustleApiUrl = DEFAULT_HUSTLE_API_URL,
   debug = false,
+  instanceId: explicitInstanceId,
 }: HustleProviderProps) {
+  // Generate stable instance ID - explicit or auto-generated based on mount order
+  const [resolvedInstanceId] = useState(() => {
+    if (explicitInstanceId) {
+      return explicitInstanceId;
+    }
+    // Auto-generate based on mount order
+    const autoId = `instance-${++instanceCounter}`;
+    mountedAutoInstances.add(autoId);
+    return autoId;
+  });
+
+  // Track if this is an auto-generated instance for cleanup
+  const isAutoInstance = !explicitInstanceId;
+
+  // Dev warning for multiple auto-generated instances
+  useEffect(() => {
+    if (isAutoInstance && mountedAutoInstances.size > 1 && process.env.NODE_ENV !== 'production') {
+      console.warn(
+        `[Hustle] Multiple HustleProviders detected without explicit instanceId. ` +
+        `For stable settings persistence, consider adding instanceId prop:\n` +
+        `  <HustleProvider instanceId="my-chat-name">`
+      );
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (isAutoInstance) {
+        mountedAutoInstances.delete(resolvedInstanceId);
+      }
+    };
+  }, [isAutoInstance, resolvedInstanceId]);
+
   // Get auth context - this provider REQUIRES EmblemAuthProvider
   const { authSDK, isAuthenticated } = useEmblemAuth();
 
-  // Get plugins
-  const { enabledPlugins } = usePlugins();
+  // Get plugins with instance scoping
+  const { enabledPlugins } = usePlugins(resolvedInstanceId);
 
   // State
   const [isLoading, setIsLoading] = useState(false);
@@ -70,8 +114,8 @@ export function HustleProvider({
   // Track registered plugins to avoid re-registering
   const registeredPluginsRef = useRef<Set<string>>(new Set());
 
-  // Settings storage key
-  const SETTINGS_KEY = 'hustle-settings';
+  // Settings storage key - scoped to instance
+  const SETTINGS_KEY = `hustle-settings-${resolvedInstanceId}`;
 
   // Load initial settings from localStorage
   const loadSettings = () => {
@@ -271,18 +315,23 @@ export function HustleProvider({
       setError(null);
 
       try {
-        // The SDK expects messages as first arg and options as second
+        // Build the messages array, prepending system prompt if provided
+        const effectiveSystemPrompt = options.systemPrompt || systemPrompt;
+        const messagesWithSystem: ChatMessage[] = [];
+
+        if (effectiveSystemPrompt) {
+          messagesWithSystem.push({ role: 'system', content: effectiveSystemPrompt });
+        }
+        messagesWithSystem.push(...options.messages);
+
         // Build the options object for the SDK
         const sdkOptions: Record<string, unknown> = {
-          messages: options.messages,
+          messages: messagesWithSystem,
           processChunks: true,
         };
 
         if (options.model || selectedModel) {
           sdkOptions.model = options.model || selectedModel;
-        }
-        if (options.systemPrompt || systemPrompt) {
-          sdkOptions.systemPrompt = options.systemPrompt || systemPrompt;
         }
         if (options.overrideSystemPrompt ?? skipServerPrompt) {
           sdkOptions.overrideSystemPrompt = true;
@@ -324,17 +373,23 @@ export function HustleProvider({
       log('Chat stream request:', options.messages.length, 'messages');
       setError(null);
 
+      // Build the messages array, prepending system prompt if provided
+      const effectiveSystemPrompt = options.systemPrompt || systemPrompt;
+      const messagesWithSystem: ChatMessage[] = [];
+
+      if (effectiveSystemPrompt) {
+        messagesWithSystem.push({ role: 'system', content: effectiveSystemPrompt });
+      }
+      messagesWithSystem.push(...options.messages);
+
       // Build the options object for the SDK
       const sdkOptions: Record<string, unknown> = {
-        messages: options.messages,
+        messages: messagesWithSystem,
         processChunks: options.processChunks ?? true,
       };
 
       if (options.model || selectedModel) {
         sdkOptions.model = options.model || selectedModel;
-      }
-      if (options.systemPrompt || systemPrompt) {
-        sdkOptions.systemPrompt = options.systemPrompt || systemPrompt;
       }
       if (options.overrideSystemPrompt ?? skipServerPrompt) {
         sdkOptions.overrideSystemPrompt = true;

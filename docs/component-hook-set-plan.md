@@ -554,9 +554,11 @@ Server streams response chunks
 
 ### Test Files
 - `tests/utils.test.ts` - Utility function tests (14 tests)
-- `tests/providers.test.tsx` - Provider and hook tests (8 tests)
+- `tests/providers.test.tsx` - Provider and hook tests (12 tests)
+- `tests/plugins.test.ts` - Plugin registry tests (22 tests)
+- `tests/settings.test.tsx` - Settings persistence tests (7 tests)
 
-### Test Results: ✅ All Passing (22/22)
+### Test Results: ✅ All Passing (55/55)
 
 **Utils Tests (14 passing):**
 - `truncateAddress` - Address truncation with various inputs
@@ -1318,3 +1320,122 @@ function App() {
 4. **Plugin Versioning**: Handle plugin updates gracefully
 5. **Lazy Loading**: Load plugin executors on-demand
 6. **Plugin Dependencies**: Allow plugins to depend on other plugins
+
+---
+
+## Phase 10: Multi-Instance Support & Documentation Gaps
+
+### 10.1 Multi-Instance Support (Implemented)
+
+Added support for multiple `HustleProvider` instances in the same app, each with isolated settings and plugins.
+
+**Implementation:**
+- `instanceId` prop on `HustleProvider` (optional)
+- Auto-generated IDs based on mount order (`instance-1`, `instance-2`, etc.)
+- Instance-scoped localStorage keys:
+  - Settings: `hustle-settings-{instanceId}`
+  - Plugin enabled state: `hustle-plugin-state-{instanceId}`
+- Global localStorage keys:
+  - Plugin installations: `hustle-plugins` (install once, available everywhere)
+- Dev-mode warning when multiple providers exist without explicit `instanceId`
+- `usePlugins` hook accepts `instanceId` parameter
+
+**Plugin Storage Model:**
+- Plugins are installed GLOBALLY - install once, available to all instances
+- Enabled/disabled state is INSTANCE-SCOPED - each instance controls its own toggles
+- This allows sharing plugins across chat instances while maintaining per-instance preferences
+
+**Usage:**
+```tsx
+// Single provider (uses "instance-1" implicitly)
+<HustleProvider>
+  <HustleChat />
+</HustleProvider>
+
+// Multiple providers with explicit IDs (recommended)
+<HustleProvider instanceId="trading-assistant">
+  <TradingChat />
+</HustleProvider>
+<HustleProvider instanceId="support-bot">
+  <SupportChat />
+</HustleProvider>
+```
+
+### 10.2 Test Coverage Gaps
+
+**Currently tested (tests/providers.test.tsx, tests/utils.test.ts):**
+- [x] Utils: truncateAddress, generateId, JWT decode/expire, formatFileSize
+- [x] EmblemAuthProvider initialization with config
+- [x] HustleProvider basic setup with SDK pattern
+- [x] Architecture: Auth first-class, Hustle depends on Auth
+
+**Needs tests:**
+- [x] `instanceId` prop (explicit ID)
+- [x] Auto-generated `instanceId` (mount-order based)
+- [x] Multiple HustleProvider instances (dev warning test)
+- [x] Settings persistence (localStorage save/load on refresh)
+- [x] System prompt injection into messages array
+- [x] `pluginRegistry` class methods (22 tests)
+- [x] `usePlugins` hook (register, enable, disable, unregister) - via pluginRegistry tests
+- [x] Plugin hydration on page refresh
+- [ ] Cross-tab sync via StorageEvent (deferred - requires browser environment)
+
+### 10.3 README Documentation Gaps
+
+**Currently documented:**
+- [x] Basic setup with providers
+- [x] useEmblemAuth hook
+- [x] useHustle hook
+- [x] ConnectButton, AuthStatus, HustleChat components
+- [x] Architecture diagram
+- [x] Environment variables
+- [x] Provider props table
+
+**Needs documentation:**
+- [x] `instanceId` prop on HustleProvider
+- [x] Multiple HustleProvider usage pattern
+- [x] Plugin system overview
+- [x] `usePlugins` hook API
+- [x] Available plugins (prediction-market-alpha, migrate-fun-kb)
+- [x] Creating custom plugins
+- [x] Settings auto-persistence behavior (plugin persistence documented)
+
+### 10.4 Implementation Checklist
+
+**Tests to add (tests/providers.test.tsx):**
+- [x] Test: `instanceId` prop creates scoped storage key
+- [x] Test: Auto-generated IDs are stable across renders
+- [x] Test: Multiple providers have isolated settings
+- [x] Test: Dev warning fires for multiple auto-instances
+
+**Tests to add (new file: tests/plugins.test.ts):** ✅ DONE (20 tests)
+- [x] Test: `pluginRegistry.register()` adds plugin to storage
+- [x] Test: `pluginRegistry.unregister()` removes plugin
+- [x] Test: `pluginRegistry.setEnabled()` toggles state
+- [x] Test: `pluginRegistry.loadFromStorage()` with instanceId scoping
+- [x] Test: `hydratePlugin()` restores executors from knownPlugins
+- [x] Test: `usePlugins` returns correct plugin state
+
+**Tests to add (tests/settings.test.tsx):** ✅ DONE (7 tests)
+- [x] Test: Settings load from localStorage on mount
+- [x] Test: Settings save to localStorage on change
+- [x] Test: Different instanceIds have separate settings
+- [x] Test: Defaults to empty settings when localStorage is empty
+- [x] Test: System prompt prepended to messages array
+- [x] Test: No system message when prompt is empty
+- [x] Test: options.systemPrompt overrides context systemPrompt
+
+**README sections to add:** ✅ DONE
+- [x] Section: "Multiple Chat Instances"
+- [x] Section: "Plugin System"
+- [x] Section: "usePlugins Hook"
+- [x] Update HustleProvider props table with `instanceId`
+
+### 10.5 Files Changed (Since Last Commit)
+
+```
+src/hooks/usePlugins.ts          | instanceId parameter added
+src/providers/HustleProvider.tsx | instanceId prop, auto-ID, scoped storage
+src/types/hustle.ts              | instanceId in HustleProviderProps
+src/utils/pluginRegistry.ts      | instanceId scoping for all methods
+```

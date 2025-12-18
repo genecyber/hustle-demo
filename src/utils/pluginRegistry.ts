@@ -2,15 +2,32 @@
  * Plugin Registry
  *
  * Manages plugin storage and state in localStorage.
+ *
+ * Storage model:
+ * - Installed plugins are GLOBAL (hustle-plugins) - install once, available everywhere
+ * - Enabled/disabled state is INSTANCE-SCOPED (hustle-plugin-state-{instanceId})
+ *
  * Executors are not stored (they're functions) - they must be
  * hydrated from known plugins when loading.
  */
 
 import type { StoredPlugin, HustlePlugin, HydratedPlugin, ToolExecutor, PluginHooks } from '../types';
 
-const STORAGE_KEY = 'hustle-plugins';
+/**
+ * Storage keys:
+ * - PLUGINS_KEY: Global list of installed plugins (not instance-scoped)
+ * - getEnabledStateKey: Per-instance enabled/disabled states
+ */
+const PLUGINS_KEY = 'hustle-plugins';
+
+function getEnabledStateKey(instanceId: string): string {
+  return `hustle-plugin-state-${instanceId}`;
+}
 
 type PluginChangeCallback = (plugins: StoredPlugin[]) => void;
+
+/** Stored enabled state per instance */
+type EnabledState = Record<string, boolean>;
 
 /**
  * Registry of known plugins (for hydrating executors)
@@ -45,18 +62,31 @@ export function hydratePlugin(stored: StoredPlugin): HydratedPlugin {
 
 /**
  * Plugin Registry class
- * Manages plugin persistence and change notifications
+ *
+ * Manages plugin persistence with:
+ * - Global plugin installations
+ * - Instance-scoped enabled/disabled state
  */
 class PluginRegistry {
-  private listeners: Set<PluginChangeCallback> = new Set();
+  private listeners: Map<string, Set<PluginChangeCallback>> = new Map();
 
   /**
-   * Load plugins from localStorage
+   * Get listeners for a specific instance
    */
-  loadFromStorage(): StoredPlugin[] {
+  private getListeners(instanceId: string): Set<PluginChangeCallback> {
+    if (!this.listeners.has(instanceId)) {
+      this.listeners.set(instanceId, new Set());
+    }
+    return this.listeners.get(instanceId)!;
+  }
+
+  /**
+   * Load installed plugins (global)
+   */
+  private loadInstalledPlugins(): Omit<StoredPlugin, 'enabled'>[] {
     if (typeof window === 'undefined') return [];
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(PLUGINS_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -64,115 +94,175 @@ class PluginRegistry {
   }
 
   /**
-   * Save plugins to localStorage
+   * Save installed plugins (global)
    */
-  private saveToStorage(plugins: StoredPlugin[]): void {
+  private saveInstalledPlugins(plugins: Omit<StoredPlugin, 'enabled'>[]): void {
     if (typeof window === 'undefined') return;
-    // Store only serializable parts (not executors/hooks)
     const serializable = plugins.map(p => ({
       name: p.name,
       version: p.version,
       description: p.description,
       tools: p.tools,
-      enabled: p.enabled,
     }));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
-    this.notifyListeners();
+    localStorage.setItem(PLUGINS_KEY, JSON.stringify(serializable));
   }
 
   /**
-   * Register a new plugin (or update existing)
+   * Load enabled state for an instance
    */
-  register(plugin: HustlePlugin, enabled = true): void {
-    // Also register as known plugin for hydration
+  private loadEnabledState(instanceId: string): EnabledState {
+    if (typeof window === 'undefined') return {};
+    try {
+      const stored = localStorage.getItem(getEnabledStateKey(instanceId));
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Save enabled state for an instance
+   */
+  private saveEnabledState(state: EnabledState, instanceId: string): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(getEnabledStateKey(instanceId), JSON.stringify(state));
+  }
+
+  /**
+   * Load plugins with instance-specific enabled state
+   * Combines global plugin list with per-instance enabled state
+   */
+  loadFromStorage(instanceId: string = 'default'): StoredPlugin[] {
+    const installed = this.loadInstalledPlugins();
+    const enabledState = this.loadEnabledState(instanceId);
+
+    return installed.map(plugin => ({
+      ...plugin,
+      // Default to enabled if no state exists for this instance
+      enabled: enabledState[plugin.name] ?? true,
+    }));
+  }
+
+  /**
+   * Register a new plugin (global - available to all instances)
+   * @param plugin The plugin to install
+   * @param enabled Initial enabled state for this instance (default: true)
+   * @param instanceId Instance to set initial enabled state for
+   */
+  register(plugin: HustlePlugin, enabled = true, instanceId: string = 'default'): void {
+    // Register as known plugin for hydration
     registerKnownPlugin(plugin);
 
-    const plugins = this.loadFromStorage();
-    const existing = plugins.findIndex(p => p.name === plugin.name);
+    // Add to global installed list
+    const installed = this.loadInstalledPlugins();
+    const existing = installed.findIndex(p => p.name === plugin.name);
 
-    const storedPlugin: StoredPlugin = {
+    const storedPlugin = {
       name: plugin.name,
       version: plugin.version,
       description: plugin.description,
       tools: plugin.tools,
-      enabled,
     };
 
     if (existing >= 0) {
-      plugins[existing] = storedPlugin;
+      installed[existing] = storedPlugin;
     } else {
-      plugins.push(storedPlugin);
+      installed.push(storedPlugin);
     }
 
-    this.saveToStorage(plugins);
+    this.saveInstalledPlugins(installed);
+
+    // Set initial enabled state for this instance
+    const enabledState = this.loadEnabledState(instanceId);
+    enabledState[plugin.name] = enabled;
+    this.saveEnabledState(enabledState, instanceId);
+
+    this.notifyListeners(instanceId);
   }
 
   /**
-   * Unregister a plugin
+   * Unregister a plugin (global - removes from all instances)
    */
-  unregister(pluginName: string): void {
-    const plugins = this.loadFromStorage().filter(p => p.name !== pluginName);
-    this.saveToStorage(plugins);
+  unregister(pluginName: string, instanceId: string = 'default'): void {
+    // Remove from global list
+    const installed = this.loadInstalledPlugins().filter(p => p.name !== pluginName);
+    this.saveInstalledPlugins(installed);
+
+    // Clean up enabled state for this instance
+    const enabledState = this.loadEnabledState(instanceId);
+    delete enabledState[pluginName];
+    this.saveEnabledState(enabledState, instanceId);
+
+    this.notifyListeners(instanceId);
   }
 
   /**
-   * Enable or disable a plugin
+   * Enable or disable a plugin (instance-scoped)
    */
-  setEnabled(pluginName: string, enabled: boolean): void {
-    const plugins = this.loadFromStorage();
-    const plugin = plugins.find(p => p.name === pluginName);
-    if (plugin) {
-      plugin.enabled = enabled;
-      this.saveToStorage(plugins);
-    }
+  setEnabled(pluginName: string, enabled: boolean, instanceId: string = 'default'): void {
+    const enabledState = this.loadEnabledState(instanceId);
+    enabledState[pluginName] = enabled;
+    this.saveEnabledState(enabledState, instanceId);
+    this.notifyListeners(instanceId);
   }
 
   /**
-   * Check if a plugin is registered
+   * Check if a plugin is installed (global)
    */
-  isRegistered(pluginName: string): boolean {
-    return this.loadFromStorage().some(p => p.name === pluginName);
+  isRegistered(pluginName: string, instanceId: string = 'default'): boolean {
+    return this.loadInstalledPlugins().some(p => p.name === pluginName);
   }
 
   /**
-   * Get a specific plugin
+   * Get a specific plugin with instance-specific enabled state
    */
-  getPlugin(pluginName: string): StoredPlugin | undefined {
-    return this.loadFromStorage().find(p => p.name === pluginName);
+  getPlugin(pluginName: string, instanceId: string = 'default'): StoredPlugin | undefined {
+    return this.loadFromStorage(instanceId).find(p => p.name === pluginName);
   }
 
   /**
-   * Get all enabled plugins (hydrated with executors)
+   * Get all enabled plugins for an instance (hydrated with executors)
    */
-  getEnabledPlugins(): HydratedPlugin[] {
-    return this.loadFromStorage()
+  getEnabledPlugins(instanceId: string = 'default'): HydratedPlugin[] {
+    return this.loadFromStorage(instanceId)
       .filter(p => p.enabled)
       .map(hydratePlugin);
   }
 
   /**
-   * Subscribe to plugin changes
+   * Subscribe to plugin changes for a specific instance
    */
-  onChange(callback: PluginChangeCallback): () => void {
-    this.listeners.add(callback);
-    return () => this.listeners.delete(callback);
+  onChange(callback: PluginChangeCallback, instanceId: string = 'default'): () => void {
+    const listeners = this.getListeners(instanceId);
+    listeners.add(callback);
+    return () => listeners.delete(callback);
   }
 
   /**
-   * Notify all listeners of changes
+   * Notify all listeners for a specific instance
    */
-  private notifyListeners(): void {
-    const plugins = this.loadFromStorage();
-    this.listeners.forEach(cb => cb(plugins));
+  private notifyListeners(instanceId: string = 'default'): void {
+    const plugins = this.loadFromStorage(instanceId);
+    const listeners = this.getListeners(instanceId);
+    listeners.forEach(cb => cb(plugins));
   }
 
   /**
-   * Clear all plugins
+   * Clear enabled state for an instance (plugins remain installed globally)
    */
-  clear(): void {
+  clear(instanceId: string = 'default'): void {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem(STORAGE_KEY);
-    this.notifyListeners();
+    localStorage.removeItem(getEnabledStateKey(instanceId));
+    this.notifyListeners(instanceId);
+  }
+
+  /**
+   * Clear all installed plugins globally
+   */
+  clearAll(): void {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(PLUGINS_KEY);
+    // Note: This doesn't clear instance-specific enabled states
   }
 }
 
