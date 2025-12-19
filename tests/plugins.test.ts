@@ -1,11 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   pluginRegistry,
-  registerKnownPlugin,
   hydratePlugin,
-  getKnownPlugins,
 } from '../src/utils/pluginRegistry';
-import type { HustlePlugin, StoredPlugin } from '../src/types';
+import type { HustlePlugin, StoredPlugin, SerializedToolDefinition } from '../src/types';
 
 // Mock localStorage for Node environment
 const localStorageMock = (() => {
@@ -263,34 +261,26 @@ describe('pluginRegistry', () => {
   });
 });
 
-describe('registerKnownPlugin', () => {
-  beforeEach(() => {
-    localStorageMock.clear();
-  });
-
-  it('registers plugin for hydration', () => {
-    registerKnownPlugin(samplePlugin);
-    const known = getKnownPlugins();
-
-    // getKnownPlugins returns an array of plugins
-    const found = known.find(p => p.name === 'test-plugin');
-    expect(found).toBeDefined();
-    expect(found?.name).toBe('test-plugin');
-  });
-});
-
 describe('hydratePlugin', () => {
   beforeEach(() => {
     localStorageMock.clear();
-    // Register the plugin so it can be hydrated
-    registerKnownPlugin(samplePlugin);
   });
 
-  it('restores executors and hooks from known plugins', () => {
+  it('restores executors from executorCode strings', () => {
+    // Create a stored plugin with serialized executorCode
+    const toolsWithCode: SerializedToolDefinition[] = [
+      {
+        name: 'test_tool',
+        description: 'A test tool',
+        parameters: { type: 'object', properties: {} },
+        executorCode: 'async (args) => ({ result: args.input })',
+      },
+    ];
+
     const stored: StoredPlugin = {
       name: 'test-plugin',
       version: '1.0.0',
-      tools: samplePlugin.tools,
+      tools: toolsWithCode,
       enabled: true,
     };
 
@@ -298,21 +288,135 @@ describe('hydratePlugin', () => {
 
     expect(hydrated.executors).toBeDefined();
     expect(hydrated.executors?.test_tool).toBeDefined();
-    expect(hydrated.hooks).toBeDefined();
-    expect(hydrated.hooks?.onRegister).toBeDefined();
+    expect(typeof hydrated.executors?.test_tool).toBe('function');
   });
 
-  it('returns plugin without executors if not in knownPlugins', () => {
+  it('restores hooks from hooksCode strings', () => {
     const stored: StoredPlugin = {
-      name: 'unknown-plugin',
+      name: 'hook-plugin',
       version: '1.0.0',
       tools: [],
+      enabled: true,
+      hooksCode: {
+        onRegisterCode: '() => console.log("registered")',
+        beforeRequestCode: '(req) => req',
+      },
+    };
+
+    const hydrated = hydratePlugin(stored);
+
+    expect(hydrated.hooks).toBeDefined();
+    expect(hydrated.hooks?.onRegister).toBeDefined();
+    expect(hydrated.hooks?.beforeRequest).toBeDefined();
+    expect(typeof hydrated.hooks?.onRegister).toBe('function');
+    expect(typeof hydrated.hooks?.beforeRequest).toBe('function');
+  });
+
+  it('executes reconstituted executor correctly', async () => {
+    const toolsWithCode: SerializedToolDefinition[] = [
+      {
+        name: 'echo_tool',
+        description: 'Echoes input',
+        parameters: { type: 'object', properties: {} },
+        executorCode: 'async (args) => ({ echoed: args.message })',
+      },
+    ];
+
+    const stored: StoredPlugin = {
+      name: 'echo-plugin',
+      version: '1.0.0',
+      tools: toolsWithCode,
+      enabled: true,
+    };
+
+    const hydrated = hydratePlugin(stored);
+    const result = await hydrated.executors?.echo_tool({ message: 'hello' });
+
+    expect(result).toEqual({ echoed: 'hello' });
+  });
+
+  it('returns plugin without executors when no executorCode present', () => {
+    const stored: StoredPlugin = {
+      name: 'no-code-plugin',
+      version: '1.0.0',
+      tools: [
+        {
+          name: 'empty_tool',
+          description: 'No executor',
+          parameters: { type: 'object', properties: {} },
+          // No executorCode
+        },
+      ],
       enabled: true,
     };
 
     const hydrated = hydratePlugin(stored);
 
+    // Should not have executors for tools without executorCode
     expect(hydrated.executors).toBeUndefined();
     expect(hydrated.hooks).toBeUndefined();
+  });
+
+  it('handles invalid executorCode gracefully', () => {
+    const toolsWithBadCode: SerializedToolDefinition[] = [
+      {
+        name: 'bad_tool',
+        description: 'Invalid code',
+        parameters: { type: 'object', properties: {} },
+        executorCode: 'this is not valid javascript {{{{',
+      },
+    ];
+
+    const stored: StoredPlugin = {
+      name: 'bad-plugin',
+      version: '1.0.0',
+      tools: toolsWithBadCode,
+      enabled: true,
+    };
+
+    // Should not throw, returns error executor
+    const hydrated = hydratePlugin(stored);
+    expect(hydrated.executors).toBeDefined();
+    expect(hydrated.executors?.bad_tool).toBeDefined();
+  });
+});
+
+describe('plugin serialization roundtrip', () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+  });
+
+  it('serializes and deserializes plugin executors correctly', async () => {
+    // Register a plugin with actual executor functions
+    pluginRegistry.register(samplePlugin, true, 'roundtrip-test');
+
+    // Load it back from storage
+    const loaded = pluginRegistry.getPlugin('test-plugin', 'roundtrip-test');
+    expect(loaded).toBeDefined();
+
+    // Hydrate to get executable functions back
+    const hydrated = hydratePlugin(loaded!);
+
+    expect(hydrated.executors).toBeDefined();
+    expect(hydrated.executors?.test_tool).toBeDefined();
+
+    // Execute the reconstituted function
+    const result = await hydrated.executors?.test_tool({ input: 'hello' });
+    expect(result).toEqual({ result: 'processed: hello' });
+  });
+
+  it('serializes and deserializes plugin hooks correctly', async () => {
+    // Register a plugin with hooks
+    pluginRegistry.register(samplePlugin, true, 'hook-roundtrip-test');
+
+    // Load and hydrate
+    const loaded = pluginRegistry.getPlugin('test-plugin', 'hook-roundtrip-test');
+    const hydrated = hydratePlugin(loaded!);
+
+    expect(hydrated.hooks).toBeDefined();
+    expect(hydrated.hooks?.onRegister).toBeDefined();
+
+    // Should be able to call the hook without error
+    expect(() => hydrated.hooks?.onRegister?.()).not.toThrow();
   });
 });

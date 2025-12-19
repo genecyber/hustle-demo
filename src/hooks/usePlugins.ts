@@ -11,6 +11,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { pluginRegistry, hydratePlugin } from '../utils/pluginRegistry';
 import type { StoredPlugin, HustlePlugin, HydratedPlugin } from '../types';
 
+// Re-export hydratePlugin for convenience
+export { hydratePlugin };
+
 /**
  * Get the storage key for a given instance
  */

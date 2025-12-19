@@ -3,6 +3,15 @@
  *
  * These types define the plugin system that allows extending the AI
  * with custom client-side tools.
+ *
+ * Executor functions are serialized as strings (executorCode) for localStorage
+ * persistence and reconstituted at runtime via new Function().
+ *
+ * SECURITY TODO: Add `signature` field to SerializedPlugin for cryptographic
+ * verification of plugin code before execution. This should use asymmetric
+ * signing (e.g., Ed25519) where plugins are signed by trusted publishers
+ * and verified before eval/Function execution.
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/verify
  */
 
 /**
@@ -35,6 +44,20 @@ export interface ClientToolDefinition {
   description: string;
   /** JSON Schema for tool arguments */
   parameters: JSONSchema;
+}
+
+/**
+ * Serialized tool definition (stored in localStorage)
+ * Contains executorCode as a string for persistence
+ */
+export interface SerializedToolDefinition extends ClientToolDefinition {
+  /**
+   * Stringified executor function body for persistence.
+   * Reconstituted at runtime via new Function().
+   *
+   * FIXME: Add signature verification before execution
+   */
+  executorCode?: string;
 }
 
 /**
@@ -89,6 +112,23 @@ export interface PluginHooks {
 }
 
 /**
+ * Serialized plugin hooks (stored in localStorage)
+ * Contains hook function bodies as strings for persistence
+ *
+ * FIXME: Add signature verification before execution
+ */
+export interface SerializedHooks {
+  /** Stringified onRegister function */
+  onRegisterCode?: string;
+  /** Stringified beforeRequest function */
+  beforeRequestCode?: string;
+  /** Stringified afterResponse function */
+  afterResponseCode?: string;
+  /** Stringified onError function */
+  onErrorCode?: string;
+}
+
+/**
  * Plugin definition
  */
 export interface HustlePlugin {
@@ -108,6 +148,9 @@ export interface HustlePlugin {
 
 /**
  * Plugin with enabled state (stored in localStorage)
+ * Tools include executorCode for function persistence
+ *
+ * FIXME: Add `signature?: string` for cryptographic verification
  */
 export interface StoredPlugin {
   /** Unique plugin identifier */
@@ -116,10 +159,14 @@ export interface StoredPlugin {
   version: string;
   /** Optional description */
   description?: string;
-  /** Tool schemas (executors are not serializable) */
-  tools?: ClientToolDefinition[];
+  /** Tool schemas with serialized executorCode */
+  tools?: SerializedToolDefinition[];
+  /** Serialized lifecycle hooks */
+  hooksCode?: SerializedHooks;
   /** Whether the plugin is enabled */
   enabled: boolean;
+  /** Timestamp when plugin was installed */
+  installedAt?: string;
 }
 
 /**

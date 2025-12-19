@@ -231,8 +231,13 @@ export function HustleProvider({
       for (const name of registeredPluginsRef.current) {
         if (!enabledNames.has(name)) {
           log('Unregistering plugin:', name);
-          // Note: SDK may not support unregistering - just track locally
-          registeredPluginsRef.current.delete(name);
+          try {
+            await client.unuse(name);
+            registeredPluginsRef.current.delete(name);
+            log('Plugin unregistered:', name);
+          } catch (err) {
+            log('Failed to unregister plugin:', name, err);
+          }
         }
       }
 
@@ -471,6 +476,9 @@ export function HustleProvider({
 
   // Context value
   const value: HustleContextValue = {
+    // Instance ID for scoped storage
+    instanceId: resolvedInstanceId,
+
     // State
     isReady,
     isLoading,

@@ -118,7 +118,5 @@ export const DEFAULTS = {
 // Plugin registry
 export {
   pluginRegistry,
-  registerKnownPlugin,
-  getKnownPlugins,
   hydratePlugin,
 } from './pluginRegistry';

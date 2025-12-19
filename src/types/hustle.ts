@@ -159,6 +159,9 @@ export interface HustleConfig {
  * Context value exposed by HustleProvider
  */
 export interface HustleContextValue {
+  // Instance identifier for scoped storage
+  instanceId: string;
+
   // State
   isReady: boolean;
   isLoading: boolean;

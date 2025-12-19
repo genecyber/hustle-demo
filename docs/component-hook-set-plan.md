@@ -555,10 +555,10 @@ Server streams response chunks
 ### Test Files
 - `tests/utils.test.ts` - Utility function tests (14 tests)
 - `tests/providers.test.tsx` - Provider and hook tests (12 tests)
-- `tests/plugins.test.ts` - Plugin registry tests (22 tests)
+- `tests/plugins.test.ts` - Plugin registry tests (26 tests)
 - `tests/settings.test.tsx` - Settings persistence tests (7 tests)
 
-### Test Results: ✅ All Passing (55/55)
+### Test Results: ✅ All Passing (61/61)
 
 **Utils Tests (14 passing):**
 - `truncateAddress` - Address truncation with various inputs
@@ -1413,7 +1413,7 @@ Added support for multiple `HustleProvider` instances in the same app, each with
 - [x] Test: `pluginRegistry.unregister()` removes plugin
 - [x] Test: `pluginRegistry.setEnabled()` toggles state
 - [x] Test: `pluginRegistry.loadFromStorage()` with instanceId scoping
-- [x] Test: `hydratePlugin()` restores executors from knownPlugins
+- [x] Test: `hydratePlugin()` restores executors from executorCode strings
 - [x] Test: `usePlugins` returns correct plugin state
 
 **Tests to add (tests/settings.test.tsx):** ✅ DONE (7 tests)
@@ -1431,11 +1431,41 @@ Added support for multiple `HustleProvider` instances in the same app, each with
 - [x] Section: "usePlugins Hook"
 - [x] Update HustleProvider props table with `instanceId`
 
-### 10.5 Files Changed (Since Last Commit)
+### 10.5 Executor Code Serialization (Implemented)
+
+Updated the plugin system to serialize executor functions as `executorCode` strings, matching the approach used by Agent Hustle proper.
+
+**Previous Approach (Deprecated):**
+- Stored plugin metadata without executors
+- Required `registerKnownPlugin()` to pre-register plugins for hydration
+- Limited to predefined plugins only
+
+**New Approach (Current):**
+- Executor functions are serialized as strings via `fn.toString()`
+- Stored in localStorage as `executorCode` field on each tool
+- Reconstituted at runtime via `eval()` (or `new Function()`)
+- Hooks are similarly stored as `hooksCode`
+- No pre-registration required - any plugin can be persisted and restored
+
+**Security Considerations:**
+- SECURITY TODO added for signature verification
+- FIXME comments on all `eval()` usage points
+- Plugins should be signed by trusted publishers before execution
+- Signature field to be added to `StoredPlugin` type
+
+**Migration:**
+- Existing plugins in localStorage need to be uninstalled and reinstalled
+- Old format lacks `executorCode`, new format requires it
+
+### 10.6 Files Changed (Since Last Commit)
 
 ```
-src/hooks/usePlugins.ts          | instanceId parameter added
-src/providers/HustleProvider.tsx | instanceId prop, auto-ID, scoped storage
-src/types/hustle.ts              | instanceId in HustleProviderProps
-src/utils/pluginRegistry.ts      | instanceId scoping for all methods
+src/types/plugin.ts              | Added SerializedToolDefinition, SerializedHooks, executorCode support
+src/types/index.ts               | Export new serialization types
+src/utils/pluginRegistry.ts      | Serialize/deserialize executors via eval(), removed knownPlugins
+src/plugins/index.ts             | Removed registerKnownPlugin calls (no longer needed)
+src/index.ts                     | Updated exports
+tests/plugins.test.ts            | New tests for executorCode serialization roundtrip
+tests/settings.test.tsx          | Updated to use executorCode pattern
+README.md                        | Updated plugin persistence docs
 ```

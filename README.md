@@ -360,10 +360,11 @@ registerPlugin(myPlugin);
 
 ### Plugin Persistence
 
-- Plugins are persisted in localStorage
-- Executors (functions) are hydrated from known plugins on page refresh
-- Enable/disable state is preserved
+- Plugins are persisted in localStorage with serialized `executorCode`
+- Executor functions are stored as strings and reconstituted via `eval()` on page refresh
+- Enable/disable state is preserved per-instance
 - Cross-tab sync via StorageEvent
+- **Note:** Existing plugins from older versions need to be uninstalled and reinstalled to use the new serialization format
 
 ## Configuration
 

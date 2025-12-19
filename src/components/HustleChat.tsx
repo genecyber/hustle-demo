@@ -634,6 +634,7 @@ export function HustleChat({
 }: HustleChatProps) {
   const { isAuthenticated } = useEmblemAuth();
   const {
+    instanceId,
     isReady,
     isLoading,
     error,
@@ -653,7 +654,7 @@ export function HustleChat({
     unregisterPlugin,
     enablePlugin,
     disablePlugin,
-  } = usePlugins();
+  } = usePlugins(instanceId);
 
   // Local state
   const [messages, setMessages] = useState<DisplayMessage[]>([]);

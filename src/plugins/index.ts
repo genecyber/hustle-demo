@@ -4,17 +4,15 @@
  * Available plugins that can be installed by users.
  * This is a hardcoded registry for the PoC - in the future
  * this could be fetched from a remote plugin marketplace.
+ *
+ * NOTE: Plugins no longer need to be pre-registered. Executor code
+ * is now serialized to localStorage as executorCode strings and
+ * reconstituted at runtime via eval().
  */
 
 import { predictionMarketPlugin } from './predictionMarket';
 import { migrateFunPlugin } from './migrateFun';
-import { registerKnownPlugin } from '../utils/pluginRegistry';
 import type { HustlePlugin } from '../types';
-
-// Register all available plugins for hydration on page load
-// This ensures executors are available when loading from localStorage
-registerKnownPlugin(predictionMarketPlugin);
-registerKnownPlugin(migrateFunPlugin);
 
 /**
  * Available plugin with display metadata

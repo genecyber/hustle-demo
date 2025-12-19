@@ -9,6 +9,9 @@ const { mockState, MockEmblemAuthSDK, MockHustleIncognitoClient } = vi.hoisted((
     lastAuthSDK: null as unknown,
     lastHustleClient: null as unknown,
     chatCalls: [] as Array<{ messages: Array<{ role: string; content: string }> }>,
+    useCalls: [] as Array<{ name: string }>,
+    unuseCalls: [] as Array<{ name: string }>,
+    registeredPlugins: new Set<string>(),
   };
 
   // Mock EmblemAuthSDK class
@@ -47,7 +50,6 @@ const { mockState, MockEmblemAuthSDK, MockHustleIncognitoClient } = vi.hoisted((
     getTools: () => Promise<unknown[]>;
     uploadFile: () => Promise<unknown>;
     on: () => void;
-    use: () => Promise<void>;
 
     constructor(config: Record<string, unknown>) {
       if (!config.sdk) {
@@ -58,9 +60,28 @@ const { mockState, MockEmblemAuthSDK, MockHustleIncognitoClient } = vi.hoisted((
       this.getTools = () => Promise.resolve([]);
       this.uploadFile = () => Promise.resolve({});
       this.on = () => {};
-      this.use = () => Promise.resolve();
       mockState.lastHustleClient = this;
     }
+
+    // Track use() calls for plugin registration
+    use = async (plugin: { name: string }) => {
+      mockState.useCalls.push({ name: plugin.name });
+      mockState.registeredPlugins.add(plugin.name);
+      return this;
+    };
+
+    // Track unuse() calls for plugin unregistration
+    unuse = async (pluginName: string) => {
+      mockState.unuseCalls.push({ name: pluginName });
+      mockState.registeredPlugins.delete(pluginName);
+      return this;
+    };
+
+    // Check if plugin is registered
+    hasPlugin = (name: string) => mockState.registeredPlugins.has(name);
+
+    // Get registered plugin names
+    getPluginNames = () => Array.from(mockState.registeredPlugins);
 
     // Track chat calls to verify system prompt injection
     chat = async (opts: Record<string, unknown>) => {
@@ -87,6 +108,8 @@ vi.mock('hustle-incognito', () => ({
 
 import { EmblemAuthProvider, resetAuthSDK } from '../src/providers/EmblemAuthProvider';
 import { HustleProvider, useHustle } from '../src/providers/HustleProvider';
+import { usePlugins } from '../src/hooks/usePlugins';
+import type { HustlePlugin, SerializedToolDefinition } from '../src/types';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -121,6 +144,9 @@ describe('Settings Persistence', () => {
     resetAuthSDK();
     mockState.lastAuthSDK = null;
     mockState.lastHustleClient = null;
+    mockState.useCalls = [];
+    mockState.unuseCalls = [];
+    mockState.registeredPlugins.clear();
     mockState.chatCalls = [];
     localStorageMock.clear();
   });
@@ -278,6 +304,9 @@ describe('System Prompt Injection', () => {
     mockState.lastAuthSDK = null;
     mockState.lastHustleClient = null;
     mockState.chatCalls = [];
+    mockState.useCalls = [];
+    mockState.unuseCalls = [];
+    mockState.registeredPlugins.clear();
     localStorageMock.clear();
   });
 
@@ -474,5 +503,165 @@ describe('System Prompt Injection', () => {
       role: 'system',
       content: 'Override prompt',
     });
+  });
+});
+
+describe('Plugin Registration with SDK', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetAuthSDK();
+    mockState.lastAuthSDK = null;
+    mockState.lastHustleClient = null;
+    mockState.chatCalls = [];
+    mockState.useCalls = [];
+    mockState.unuseCalls = [];
+    mockState.registeredPlugins.clear();
+    localStorageMock.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('calls client.use() when plugin is enabled', async () => {
+    const mockSession = {
+      user: { vaultId: '123', identifier: 'test' },
+      authToken: 'jwt-token',
+      expiresAt: Date.now() + 3600000,
+      appId: 'test',
+    };
+
+    // Create a serialized plugin with executorCode (new pattern)
+    const serializedTools: SerializedToolDefinition[] = [{
+      name: 'test_tool',
+      description: 'A test tool',
+      parameters: { type: 'object', properties: {} },
+      executorCode: 'async () => ({ result: "test" })',
+    }];
+
+    // Store plugin with executorCode in localStorage
+    localStorageMock.setItem('hustle-plugins', JSON.stringify([{
+      name: 'test-plugin',
+      version: '1.0.0',
+      description: 'Test plugin',
+      tools: serializedTools,
+      installedAt: new Date().toISOString(),
+    }]));
+    localStorageMock.setItem('hustle-plugin-state-use-test', JSON.stringify({ 'test-plugin': true }));
+
+    function TestComponent() {
+      const { isReady } = useHustle();
+      return <div data-testid="ready">{String(isReady)}</div>;
+    }
+
+    render(
+      <EmblemAuthProvider appId="test">
+        <HustleProvider instanceId="use-test">
+          <TestComponent />
+        </HustleProvider>
+      </EmblemAuthProvider>
+    );
+
+    // Trigger authentication
+    await act(async () => {
+      getLastAuthSDK()?.triggerSuccess(mockSession);
+    });
+
+    // Wait for plugin registration effect to run
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    // Verify client.use() was called with the plugin
+    expect(mockState.useCalls.length).toBeGreaterThan(0);
+    expect(mockState.useCalls.some(call => call.name === 'test-plugin')).toBe(true);
+    expect(mockState.registeredPlugins.has('test-plugin')).toBe(true);
+  });
+
+  it('calls client.unuse() when plugin is disabled', async () => {
+    const mockSession = {
+      user: { vaultId: '123', identifier: 'test' },
+      authToken: 'jwt-token',
+      expiresAt: Date.now() + 3600000,
+      appId: 'test',
+    };
+
+    // Create a serialized plugin with executorCode (new pattern)
+    const serializedTools: SerializedToolDefinition[] = [{
+      name: 'unuse_tool',
+      description: 'A test tool',
+      parameters: { type: 'object', properties: {} },
+      executorCode: 'async () => ({ result: "test" })',
+    }];
+
+    // Store plugin with executorCode in localStorage
+    localStorageMock.setItem('hustle-plugins', JSON.stringify([{
+      name: 'unuse-test-plugin',
+      version: '1.0.0',
+      description: 'Test plugin for unuse',
+      tools: serializedTools,
+      installedAt: new Date().toISOString(),
+    }]));
+    localStorageMock.setItem('hustle-plugin-state-unuse-test', JSON.stringify({ 'unuse-test-plugin': true }));
+
+    // We need to track when plugin state changes
+    let disablePlugin: ((name: string) => void) | null = null;
+
+    function TestComponent() {
+      const { isReady, instanceId } = useHustle();
+      const pluginHook = usePlugins(instanceId);
+
+      // Capture the disablePlugin function
+      React.useEffect(() => {
+        disablePlugin = pluginHook.disablePlugin;
+      }, [pluginHook.disablePlugin]);
+
+      return (
+        <div>
+          <span data-testid="ready">{String(isReady)}</span>
+          <span data-testid="plugin-count">{pluginHook.plugins.length}</span>
+        </div>
+      );
+    }
+
+    render(
+      <EmblemAuthProvider appId="test">
+        <HustleProvider instanceId="unuse-test">
+          <TestComponent />
+        </HustleProvider>
+      </EmblemAuthProvider>
+    );
+
+    // Trigger authentication
+    await act(async () => {
+      getLastAuthSDK()?.triggerSuccess(mockSession);
+    });
+
+    // Wait for plugin registration effect to run
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    // Verify plugin was registered
+    expect(mockState.useCalls.some(call => call.name === 'unuse-test-plugin')).toBe(true);
+    expect(mockState.registeredPlugins.has('unuse-test-plugin')).toBe(true);
+
+    // Clear tracking to isolate unuse calls
+    mockState.unuseCalls = [];
+
+    // Now disable the plugin
+    await act(async () => {
+      disablePlugin?.('unuse-test-plugin');
+    });
+
+    // Wait for unregistration effect to run
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    // Verify client.unuse() was called
+    expect(mockState.unuseCalls.length).toBeGreaterThan(0);
+    expect(mockState.unuseCalls.some(call => call.name === 'unuse-test-plugin')).toBe(true);
+    expect(mockState.registeredPlugins.has('unuse-test-plugin')).toBe(false);
   });
 });

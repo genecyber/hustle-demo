@@ -98,11 +98,13 @@ export type {
   JSONSchema,
   JSONSchemaProperty,
   ClientToolDefinition,
+  SerializedToolDefinition,
   ToolExecutor,
   HustleRequest,
   ProcessedResponse,
   ErrorContext,
   PluginHooks,
+  SerializedHooks,
   HustlePlugin,
   StoredPlugin,
   HydratedPlugin,
@@ -124,8 +126,6 @@ export {
   DEFAULTS,
   // Plugin utilities
   pluginRegistry,
-  registerKnownPlugin,
-  getKnownPlugins,
   hydratePlugin,
 } from './utils';
 
