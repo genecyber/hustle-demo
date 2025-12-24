@@ -17,6 +17,7 @@ import type {
   ChatOptions,
   StreamOptions,
   StreamChunk,
+  StreamWithResponse,
   ChatResponse,
   Attachment,
   HustleContextValue,
@@ -365,13 +366,14 @@ export function HustleProvider({
    * Send a chat message with streaming response
    */
   const chatStreamImpl = useCallback(
-    (options: StreamOptions): AsyncIterable<StreamChunk> => {
+    (options: StreamOptions): StreamWithResponse => {
       if (!client) {
-        // Return an async iterable that yields an error
+        // Return a stream with error that yields an error
         return {
           [Symbol.asyncIterator]: async function* () {
             yield { type: 'error', value: { message: 'Hustle client not ready. Please authenticate first.' } } as StreamChunk;
           },
+          response: Promise.resolve({ content: '', messageId: undefined }),
         };
       }
 
@@ -406,7 +408,7 @@ export function HustleProvider({
       // Get the stream from the client (cast through unknown for SDK compatibility)
       const stream = client.chatStream(sdkOptions as unknown as Parameters<typeof client.chatStream>[0]);
 
-      // Wrap to add logging and type conversion
+      // Wrap to add logging and type conversion, preserving .response property
       return {
         [Symbol.asyncIterator]: async function* () {
           try {
@@ -441,6 +443,9 @@ export function HustleProvider({
             yield { type: 'error', value: { message: error.message } } as StreamChunk;
           }
         },
+        // Forward the response promise from the SDK stream (includes afterResponse hook modifications)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        response: (stream as any).response as Promise<ChatResponse>,
       };
     },
     [client, selectedModel, systemPrompt, skipServerPrompt, log]

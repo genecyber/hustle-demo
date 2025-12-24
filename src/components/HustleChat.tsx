@@ -794,16 +794,22 @@ export function HustleChat({
         }
       }
 
-      // Finalize the message
+      // Get the processed response (includes afterResponse hook modifications)
+      const processedResponse = await stream.response;
+
+      // Use hook-processed content if available, fallback to streamed content
+      const finalContent = processedResponse?.content || fullContent || '(No response)';
+
+      // Finalize the message with hook-processed content
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantMessage.id
-            ? { ...m, isStreaming: false, content: fullContent || '(No response)' }
+            ? { ...m, isStreaming: false, content: finalContent }
             : m
         )
       );
 
-      onResponse?.(fullContent);
+      onResponse?.(finalContent);
     } catch (err) {
       console.error('Chat error:', err);
       setMessages(prev =>

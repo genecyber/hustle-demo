@@ -22,6 +22,7 @@ export type {
   ChatOptions,
   StreamOptions,
   StreamChunk,
+  StreamWithResponse,
   ChatResponse,
   ToolStartEvent,
   ToolEndEvent,

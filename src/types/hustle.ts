@@ -91,6 +91,14 @@ export type StreamChunk =
   | { type: 'error'; value: { message: string } };
 
 /**
+ * Stream with response promise (for accessing hook-processed content)
+ */
+export interface StreamWithResponse extends AsyncIterable<StreamChunk> {
+  /** Promise that resolves to the complete response after streaming (includes afterResponse hook modifications) */
+  response: Promise<ChatResponse>;
+}
+
+/**
  * Complete chat response
  */
 export interface ChatResponse {
@@ -173,7 +181,7 @@ export interface HustleContextValue {
 
   // Chat methods
   chat: (options: ChatOptions) => Promise<ChatResponse>;
-  chatStream: (options: StreamOptions) => AsyncIterable<StreamChunk>;
+  chatStream: (options: StreamOptions) => StreamWithResponse;
 
   // File upload
   uploadFile: (file: File) => Promise<Attachment>;

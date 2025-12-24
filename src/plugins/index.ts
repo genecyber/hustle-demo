@@ -12,6 +12,8 @@
 
 import { predictionMarketPlugin } from './predictionMarket';
 import { migrateFunPlugin } from './migrateFun';
+import { piiProtectionPlugin } from './piiProtection';
+import { userQuestionPlugin } from './userQuestion';
 import type { HustlePlugin } from '../types';
 
 /**
@@ -34,6 +36,14 @@ export const availablePlugins: AvailablePlugin[] = [
     ...migrateFunPlugin,
     description: 'Search Migrate.fun knowledge base for token migration answers',
   },
+  {
+    ...piiProtectionPlugin,
+    description: 'Tokenizes PII before sending to AI, restores in responses',
+  },
+  {
+    ...userQuestionPlugin,
+    description: 'Allows AI to ask users multiple choice questions via modal',
+  },
 ];
 
 /**
@@ -46,3 +56,5 @@ export function getAvailablePlugin(name: string): AvailablePlugin | undefined {
 // Re-export individual plugins
 export { predictionMarketPlugin };
 export { migrateFunPlugin };
+export { piiProtectionPlugin };
+export { userQuestionPlugin };
