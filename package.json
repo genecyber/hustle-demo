@@ -1,6 +1,6 @@
 {
   "name": "agent-hustle-demo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "React hooks and components for Emblem Auth + Hustle SDK integration",
   "main": "dist/index.cjs",
@@ -45,7 +45,9 @@
   },
   "dependencies": {
     "emblem-auth-sdk": "^1.0.0-alpha.6",
-    "hustle-incognito": "^0.2.7"
+    "highlight.js": "^11.11.1",
+    "hustle-incognito": "^0.2.11",
+    "marked": "^17.0.1"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

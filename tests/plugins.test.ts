@@ -131,11 +131,11 @@ describe('pluginRegistry', () => {
   describe('isRegistered', () => {
     it('returns true for registered plugin', () => {
       pluginRegistry.register(samplePlugin, true, 'test-instance');
-      expect(pluginRegistry.isRegistered('test-plugin', 'test-instance')).toBe(true);
+      expect(pluginRegistry.isRegistered('test-plugin')).toBe(true);
     });
 
     it('returns false for unregistered plugin', () => {
-      expect(pluginRegistry.isRegistered('non-existent', 'test-instance')).toBe(false);
+      expect(pluginRegistry.isRegistered('non-existent')).toBe(false);
     });
   });
 

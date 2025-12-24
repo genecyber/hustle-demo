@@ -33,7 +33,9 @@ export default defineConfig([
     splitting: false,
     sourcemap: true,
     clean: false,
+    // marked + highlight.js bundled for markdown rendering
     external: ['react', 'react-dom', 'emblem-auth-sdk', 'hustle-incognito'],
+    noExternal: ['marked', 'highlight.js'],
     treeshake: true,
     minify: false,
     target: 'es2020',

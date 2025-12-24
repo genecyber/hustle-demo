@@ -10,3 +10,6 @@ export type { AuthStatusProps } from './AuthStatus';
 
 export { HustleChat } from './HustleChat';
 export type { HustleChatProps } from './HustleChat';
+
+export { MarkdownContent } from './MarkdownContent';
+export type { MarkdownContentProps } from './MarkdownContent';

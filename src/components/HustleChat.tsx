@@ -6,6 +6,7 @@ import { useEmblemAuth } from '../providers/EmblemAuthProvider';
 import { usePlugins } from '../hooks/usePlugins';
 import { availablePlugins } from '../plugins';
 import { tokens, presets, animations } from '../styles';
+import { MarkdownContent } from './MarkdownContent';
 import type { ChatMessage, StreamChunk, ToolCall, Attachment } from '../types';
 
 // ============================================================================
@@ -1213,7 +1214,13 @@ function MessageBubble({ message, showDebug }: MessageBubbleProps) {
       <div style={bubbleStyle}>
         {/* Message content */}
         <div style={styles.messageContent}>
-          {message.content}
+          {isUser || isSystem ? (
+            // User and system messages: plain text
+            message.content
+          ) : (
+            // Assistant messages: render markdown
+            <MarkdownContent content={message.content} />
+          )}
           {message.isStreaming && (
             <span style={styles.streamingCursor} />
           )}
